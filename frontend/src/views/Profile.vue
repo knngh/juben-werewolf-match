@@ -11,7 +11,7 @@
             :key="t"
             type="button"
             :class="['chip', profile.gameTypes && profile.gameTypes.includes(t) ? 'active' : '']"
-            @click="toggle(profile.gameTypes, t, 'gameTypes')"
+            @click="toggle(profile.gameTypes, t)"
           >{{ t }}</button>
         </div>
       </div>
@@ -23,7 +23,7 @@
             :key="s"
             type="button"
             :class="['chip', profile.playStyles && profile.playStyles.includes(s) ? 'active' : '']"
-            @click="toggle(profile.playStyles, s, 'playStyles')"
+            @click="toggle(profile.playStyles, s)"
           >{{ s }}</button>
         </div>
       </div>
@@ -35,7 +35,7 @@
             :key="r"
             type="button"
             :class="['chip', profile.preferredRoles && profile.preferredRoles.includes(r) ? 'active' : '']"
-            @click="toggle(profile.preferredRoles, r, 'preferredRoles')"
+            @click="toggle(profile.preferredRoles, r)"
           >{{ r }}</button>
         </div>
       </div>
@@ -75,11 +75,11 @@ const profile = reactive({
   intro: '',
 })
 
-function toggle(arr, item, key) {
-  if (!profile[key]) profile[key] = []
-  const i = profile[key].indexOf(item)
-  if (i >= 0) profile[key].splice(i, 1)
-  else profile[key].push(item)
+function toggle(arr, item) {
+  if (!arr) return
+  const i = arr.indexOf(item)
+  if (i >= 0) arr.splice(i, 1)
+  else arr.push(item)
 }
 
 async function loadOptions() {

@@ -75,9 +75,11 @@ app.post(
     if (!phone && !wechat) {
       return res.status(400).json({ code: 400, message: '请填写手机号或微信号' });
     }
-    const user = db.prepare(
-      'SELECT id, nickname, password_hash FROM users WHERE phone = ? OR wechat = ?'
-    ).get(phone || null, wechat || null);
+    // 根据哪个字段有值来动态构建查询条件
+    const query = phone 
+      ? 'SELECT id, nickname, password_hash FROM users WHERE phone = ?'
+      : 'SELECT id, nickname, password_hash FROM users WHERE wechat = ?';
+    const user = db.prepare(query).get(phone || wechat);
     if (!user) {
       return res.status(401).json({ code: 401, message: '用户不存在' });
     }
@@ -120,17 +122,35 @@ app.post(
   ],
   (req, res) => {
     const { gameTypes, playStyles, preferredRoles, playFreq, intro, city } = req.body;
-    db.prepare(
-      `UPDATE profiles SET game_types=?, play_styles=?, preferred_roles=?, play_freq=?, intro=?, city=?, updated_at=datetime('now') WHERE user_id=?`
-    ).run(
-      JSON.stringify(gameTypes || []),
-      JSON.stringify(playStyles || []),
-      JSON.stringify(preferredRoles || []),
-      playFreq || '',
-      intro || '',
-      city || '',
-      req.userId
-    );
+    
+    // 先检查是否存在profiles记录，不存在则插入
+    const existing = db.prepare('SELECT 1 FROM profiles WHERE user_id = ?').get(req.userId);
+    
+    if (!existing) {
+      db.prepare(
+        `INSERT INTO profiles (user_id, game_types, play_styles, preferred_roles, play_freq, intro, city, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+      ).run(
+        req.userId,
+        JSON.stringify(gameTypes || []),
+        JSON.stringify(playStyles || []),
+        JSON.stringify(preferredRoles || []),
+        playFreq || '',
+        intro || '',
+        city || ''
+      );
+    } else {
+      db.prepare(
+        `UPDATE profiles SET game_types=?, play_styles=?, preferred_roles=?, play_freq=?, intro=?, city=?, updated_at=datetime('now') WHERE user_id=?`
+      ).run(
+        JSON.stringify(gameTypes || []),
+        JSON.stringify(playStyles || []),
+        JSON.stringify(preferredRoles || []),
+        playFreq || '',
+        intro || '',
+        city || '',
+        req.userId
+      );
+    }
     res.json({ code: 0, message: '保存成功' });
   }
 );
