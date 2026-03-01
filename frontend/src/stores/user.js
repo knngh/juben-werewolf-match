@@ -30,7 +30,7 @@ export const useUserStore = defineStore('user', () => {
   async function fetchMe() {
     if (!token.value) return
     const res = await api.get('/api/me')
-    if (res.data && res.data.data) user.value = res.data.data
+    if (res.code === 0 && res.data) user.value = res.data
   }
 
   return { token, user, isLoggedIn, setAuth, logout, fetchMe }

@@ -56,12 +56,12 @@ npm start
 ## 上传到 GitHub（新建仓库）
 
 1. **在 GitHub 新建空仓库**  
-   例如：`juben-werewolf-match`，不要勾选 “Add a README”等初始化选项。
+   例如：`juben-werewolf-match`，不要勾选 “Add a README” 等初始化选项。
 
 2. **在本机进入项目目录并推送到新仓库**  
 
    ```bash
-   cd /Volumes/ZGH/程序库/mtxz-all/juben-werewolf-match
+   cd juben-werewolf-match
    git init
    git add .
    git commit -m "feat: 剧本杀狼人杀交友匹配（Taste 式偏好匹配）"
@@ -77,9 +77,8 @@ npm start
    git push -u origin main
    ```
 
-3. **若项目当前在 mtxz-all 仓库内**  
-
-   先复制整个 `juben-werewolf-match` 文件夹到仓库外（例如桌面），再在新文件夹内执行上面的 `git init` 和后续命令，这样会形成独立仓库再推送到 GitHub。
+3. **若项目已在其他仓库内**  
+   先复制整个 `juben-werewolf-match` 文件夹到仓库外，再在新文件夹内执行 `git init` 和上述命令，形成独立仓库后推送到 GitHub。
 
 ## 目录结构
 

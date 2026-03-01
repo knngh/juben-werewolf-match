@@ -5,8 +5,6 @@ const bcrypt = require('bcryptjs');
 const db = require('./db');
 const { sign, middleware, requireAuth } = require('./auth');
 
-require('./db');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -57,7 +55,8 @@ app.post(
       if (e.message && e.message.includes('UNIQUE')) {
         return res.status(400).json({ code: 400, message: '手机号或微信号已注册' });
       }
-      throw e;
+      console.error('Register error:', e);
+      return res.status(500).json({ code: 500, message: '注册失败，请稍后重试' });
     }
   }
 );
@@ -207,7 +206,8 @@ app.post('/api/like/:userId', requireAuth, (req, res) => {
     if (e.message && e.message.includes('UNIQUE')) {
       return res.json({ code: 0, data: { matched: false }, message: '已经点过赞' });
     }
-    throw e;
+    console.error('Like error:', e);
+    return res.status(500).json({ code: 500, message: '操作失败，请稍后重试' });
   }
   const mutual = db.prepare('SELECT 1 FROM likes WHERE from_user_id = ? AND to_user_id = ?').get(toUserId, req.userId);
   res.json({ code: 0, data: { matched: !!mutual }, message: mutual ? '匹配成功！' : '已点赞' });

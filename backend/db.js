@@ -16,6 +16,8 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_wechat ON users(wechat) WHERE wechat IS NOT NULL;
+
   CREATE TABLE IF NOT EXISTS profiles (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     game_types TEXT DEFAULT '[]',

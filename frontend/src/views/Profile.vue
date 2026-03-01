@@ -84,13 +84,13 @@ function toggle(arr, item) {
 
 async function loadOptions() {
   const res = await api.get('/api/options')
-  if (res.data && res.data.data) options.value = res.data.data
+  if (res.code === 0 && res.data) options.value = res.data
 }
 
 async function loadMe() {
   const res = await api.get('/api/me')
-  if (res.data && res.data.data) {
-    const p = res.data.data.profile || {}
+  if (res.code === 0 && res.data) {
+    const p = res.data.profile || {}
     profile.gameTypes = p.gameTypes || []
     profile.playStyles = p.playStyles || []
     profile.preferredRoles = p.preferredRoles || []

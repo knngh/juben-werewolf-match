@@ -12,7 +12,7 @@ async function request(url, options = {}) {
   const data = await res.json().catch(() => ({}))
   if (res.status === 401) {
     localStorage.removeItem('jwm_token')
-    window.location.href = '/#/login'
+    window.location.href = '/login'
   }
   return { ...data, status: res.status }
 }

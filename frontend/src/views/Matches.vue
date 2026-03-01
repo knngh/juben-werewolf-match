@@ -29,7 +29,7 @@ async function load() {
   loading.value = true
   const res = await api.get('/api/matches')
   loading.value = false
-  if (res.data && res.data.data) list.value = res.data.data
+  if (res.code === 0 && Array.isArray(res.data)) list.value = res.data
 }
 
 onMounted(load)
