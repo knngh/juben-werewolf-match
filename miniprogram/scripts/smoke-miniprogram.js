@@ -62,9 +62,13 @@ assert(loginSource.includes('navigateAfterLogin'), '登录页应支持登录后�
 const sessionDetailSource = fs.readFileSync(path.join(root, 'pages/session-detail/index.js'), 'utf8');
 assert(sessionDetailSource.includes('onShareAppMessage'), '局详情页应支持分享');
 assert(sessionDetailSource.includes('loginUrlWithRedirect'), '局详情页未登录互动应带回跳地址');
+assert(sessionDetailSource.includes('parseSessionId'), '局详情页应支持 scene 参数解析');
+assert(sessionDetailSource.includes('wx.setClipboardData'), '局详情页应支持复制微信号');
+assert(sessionDetailSource.includes('wx.showShareMenu'), '局详情页应显式启用分享菜单');
 
 const sessionsSource = fs.readFileSync(path.join(root, 'pages/sessions/index.js'), 'utf8');
 assert(sessionsSource.includes('onShareAppMessage'), '找局页应支持分享');
+assert(sessionsSource.includes('wx.showShareMenu'), '找局页应显式启用分享菜单');
 
 const profileSource = fs.readFileSync(path.join(root, 'pages/profile/index.js'), 'utf8');
 assert(profileSource.includes('/api/notification-preferences'), '资料页应接入通知偏好 API');

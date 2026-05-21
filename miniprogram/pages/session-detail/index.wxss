@@ -41,6 +41,11 @@
   font-weight: 700;
 }
 
+.copy-btn,
+.login-join-btn {
+  margin-top: 18rpx;
+}
+
 .tag-block,
 .reason-row {
   margin-top: 18rpx;

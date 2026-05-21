@@ -32,6 +32,7 @@
       <text class="section-title">联系方式</text>
       <text wx:if="{{session.contactNote}}" class="detail-meta">{{session.contactNote}}</text>
       <text wx:if="{{session.creator.wechat}}" class="contact-text">微信号：{{session.creator.wechat}}</text>
+      <button wx:if="{{session.creator.wechat}}" class="btn btn-secondary btn-small copy-btn" data-value="{{session.creator.wechat}}" bindtap="copyWechat">复制微信号</button>
     </view>
 
     <view wx:if="{{isCreator}}" class="card">
@@ -80,6 +81,7 @@
         <textarea class="textarea" value="{{message}}" bindinput="onMessageInput" maxlength="200" placeholder="简单介绍一下自己，比如常玩类型和时间是否确定" />
         <button class="btn btn-primary btn-full" loading="{{requesting}}" bindtap="requestJoin">发送申请</button>
       </view>
+      <button wx:elif="{{!session.requestStatus && !hasToken}}" class="btn btn-primary btn-full login-join-btn" bindtap="goLogin">登录后申请</button>
       <text wx:elif="{{!session.requestStatus}}" class="detail-meta">当前无法申请这个局</text>
     </view>
 

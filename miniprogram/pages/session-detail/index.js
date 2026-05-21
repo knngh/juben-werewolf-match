@@ -27,6 +27,24 @@ function enrichRequest(item) {
   });
 }
 
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(value || '');
+  } catch {
+    return value || '';
+  }
+}
+
+function parseSessionId(query = {}) {
+  if (query.id) return String(query.id);
+  const scene = safeDecode(query.scene).trim();
+  if (!scene) return '';
+  if (/^\d+$/.test(scene)) return scene;
+  const sidMatch = scene.match(/(?:^|[?&])(?:sid|id)=(\d+)(?:$|[&?])/i) || scene.match(/^(?:sid|id)[_:-](\d+)$/i);
+  if (sidMatch) return sidMatch[1];
+  return '';
+}
+
 Page({
   data: {
     id: '',
@@ -35,6 +53,7 @@ Page({
     session: null,
     isCreator: false,
     hasContact: false,
+    hasToken: false,
     requests: [],
     approvedRequests: [],
     message: '',
@@ -50,7 +69,11 @@ Page({
   },
 
   onLoad(query) {
-    this.setData({ id: query.id });
+    this.enableShareMenu();
+    this.setData({
+      id: parseSessionId(query),
+      hasToken: !!api.getToken(),
+    });
     if (api.getToken()) {
       app.refreshMe().then(() => this.load());
     } else {
@@ -59,6 +82,7 @@ Page({
   },
 
   onShow() {
+    this.setData({ hasToken: !!api.getToken() });
     if (this.data.id) {
       this.load();
     }
@@ -106,6 +130,19 @@ Page({
       return false;
     }
     return true;
+  },
+
+  enableShareMenu() {
+    if (wx.showShareMenu) {
+      wx.showShareMenu({
+        withShareTicket: true,
+        menus: ['shareAppMessage', 'shareTimeline'],
+      });
+    }
+  },
+
+  goLogin() {
+    wx.navigateTo({ url: navigation.loginUrlWithRedirect() });
   },
 
   onCertaintyChange(event) {
@@ -182,6 +219,20 @@ Page({
       toUserId: session.creator.id,
     }, this.data.feedback)).then((res) => {
       wx.showToast({ title: res.code === 0 ? '已保存' : (res.message || '反馈失败'), icon: res.code === 0 ? 'success' : 'none' });
+    });
+  },
+
+  copyWechat(event) {
+    const value = event.currentTarget.dataset.value || (this.data.session && this.data.session.creator && this.data.session.creator.wechat);
+    if (!value) {
+      wx.showToast({ title: '暂无微信号', icon: 'none' });
+      return;
+    }
+    wx.setClipboardData({
+      data: value,
+      success: () => {
+        wx.showToast({ title: '已复制微信号', icon: 'success' });
+      },
     });
   },
 
