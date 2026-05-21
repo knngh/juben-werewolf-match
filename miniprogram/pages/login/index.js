@@ -1,4 +1,5 @@
 const api = require('../../utils/api');
+const navigation = require('../../utils/navigation');
 
 const app = getApp();
 
@@ -7,11 +8,18 @@ Page({
     mode: 'login',
     submitting: false,
     wechatSubmitting: false,
+    redirect: '',
     form: {
       nickname: '',
       identifier: '',
       password: '',
     },
+  },
+
+  onLoad(query) {
+    this.setData({
+      redirect: query.redirect || '',
+    });
   },
 
   switchLogin() {
@@ -72,9 +80,7 @@ Page({
     api.post(url, payload).then((res) => {
       this.setData({ submitting: false });
       if (res.code === 0 && res.data) {
-        app.setLogin(res.data);
-        app.refreshMe();
-        wx.switchTab({ url: '/pages/sessions/index' });
+        this.completeLogin(res.data);
       } else {
         wx.showToast({ title: res.message || '操作失败', icon: 'none' });
       }
@@ -93,9 +99,7 @@ Page({
         api.post('/api/wechat/login', { code: loginRes.code }).then((res) => {
           this.setData({ wechatSubmitting: false });
           if (res.code === 0 && res.data) {
-            app.setLogin(res.data);
-            app.refreshMe();
-            wx.switchTab({ url: '/pages/sessions/index' });
+            this.completeLogin(res.data);
           } else {
             wx.showToast({ title: res.message || '微信登录失败', icon: 'none' });
           }
@@ -106,5 +110,11 @@ Page({
         wx.showToast({ title: '微信登录不可用', icon: 'none' });
       },
     });
+  },
+
+  completeLogin(data) {
+    app.setLogin(data);
+    app.refreshMe();
+    navigation.navigateAfterLogin(this.data.redirect);
   },
 });

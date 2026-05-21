@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
 const format = require('../../utils/format');
+const navigation = require('../../utils/navigation');
 
 const app = getApp();
 
@@ -101,7 +102,7 @@ Page({
 
   ensureLogin() {
     if (!api.getToken()) {
-      wx.navigateTo({ url: '/pages/login/index' });
+      wx.navigateTo({ url: navigation.loginUrlWithRedirect() });
       return false;
     }
     return true;
@@ -220,5 +221,25 @@ Page({
         });
       },
     });
+  },
+
+  onShareAppMessage() {
+    const session = this.data.session || {};
+    const seatsLeft = session.seatsLeft !== undefined ? session.seatsLeft : '';
+    const title = session.title
+      ? session.title + (seatsLeft !== '' ? '，还差 ' + seatsLeft + ' 人' : '')
+      : '来找桌游搭子';
+    return {
+      title,
+      path: '/pages/session-detail/index?id=' + this.data.id + '&source=share',
+    };
+  },
+
+  onShareTimeline() {
+    const session = this.data.session || {};
+    return {
+      title: session.title || '来找桌游搭子',
+      query: 'id=' + this.data.id + '&source=timeline',
+    };
   },
 });

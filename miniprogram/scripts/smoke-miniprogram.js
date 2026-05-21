@@ -57,6 +57,14 @@ assert(configSource.includes('subscribeTemplateIds'), '小程序订阅消息模�
 const loginSource = fs.readFileSync(path.join(root, 'pages/login/index.js'), 'utf8');
 assert(loginSource.includes('wx.login'), '登录页应接入 wx.login');
 assert(loginSource.includes('/api/wechat/login'), '登录页应调用微信登录 API');
+assert(loginSource.includes('navigateAfterLogin'), '登录页应支持登录后回跳');
+
+const sessionDetailSource = fs.readFileSync(path.join(root, 'pages/session-detail/index.js'), 'utf8');
+assert(sessionDetailSource.includes('onShareAppMessage'), '局详情页应支持分享');
+assert(sessionDetailSource.includes('loginUrlWithRedirect'), '局详情页未登录互动应带回跳地址');
+
+const sessionsSource = fs.readFileSync(path.join(root, 'pages/sessions/index.js'), 'utf8');
+assert(sessionsSource.includes('onShareAppMessage'), '找局页应支持分享');
 
 const profileSource = fs.readFileSync(path.join(root, 'pages/profile/index.js'), 'utf8');
 assert(profileSource.includes('/api/notification-preferences'), '资料页应接入通知偏好 API');

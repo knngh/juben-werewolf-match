@@ -22,7 +22,10 @@
 
       <text wx:if="{{session.note}}" class="note">{{session.note}}</text>
       <view class="divider"></view>
-      <text class="creator">发起人：{{session.creator.nickname}}</text>
+      <view class="detail-footer">
+        <text class="creator">发起人：{{session.creator.nickname}}</text>
+        <button class="btn btn-secondary btn-small" open-type="share">分享这局</button>
+      </view>
     </view>
 
     <view wx:if="{{hasContact}}" class="card">

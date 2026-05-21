@@ -426,3 +426,31 @@ curl http://127.0.0.1:3000/api/health
 - `miniprogram/config.js`
 - `miniprogram/pages/login/index.*`
 - `miniprogram/pages/profile/index.*`
+
+## Plan 11: 小程序分享组局闭环
+
+状态：开发中。
+
+目标：让用户可以把具体桌游局分享到微信群或好友，降低组局获客成本。
+
+任务：
+
+- P11.1 局详情页支持 `onShareAppMessage` 和朋友圈分享参数。
+- P11.2 找局首页支持默认分享入口。
+- P11.3 未登录用户从分享进入局详情后，申请/举报/反馈时跳登录页并携带回跳地址。
+- P11.4 登录成功后根据 `redirect` 回到原来的局详情。
+- P11.5 小程序 smoke 覆盖分享处理和登录回跳。
+
+验收：
+
+- 分享局详情卡片包含局标题和局 ID。
+- 未登录用户从分享进入后，登录成功能回到原局详情。
+- 找局首页也可以作为普通分享入口。
+- `node miniprogram/scripts/smoke-miniprogram.js` 通过。
+
+主要文件：
+
+- `miniprogram/utils/navigation.js`
+- `miniprogram/pages/login/index.*`
+- `miniprogram/pages/session-detail/index.*`
+- `miniprogram/pages/sessions/index.js`

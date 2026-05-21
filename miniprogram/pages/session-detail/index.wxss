@@ -3,6 +3,7 @@
 }
 
 .session-head,
+.detail-footer,
 .owner-head {
   display: flex;
   align-items: center;

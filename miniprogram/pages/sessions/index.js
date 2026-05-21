@@ -192,4 +192,18 @@ Page({
     const id = event.currentTarget.dataset.id;
     wx.navigateTo({ url: '/pages/session-detail/index?id=' + id });
   },
+
+  onShareAppMessage() {
+    return {
+      title: '找剧本杀、狼人杀、跑团和桌游搭子',
+      path: '/pages/sessions/index?source=share',
+    };
+  },
+
+  onShareTimeline() {
+    return {
+      title: '找桌游搭子，一起组局',
+      query: 'source=timeline',
+    };
+  },
 });
