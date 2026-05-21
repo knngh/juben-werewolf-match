@@ -15,12 +15,17 @@ Page({
     loading: false,
     submitting: false,
     geoSearching: false,
+    aiGenerating: false,
     isEdit: false,
     editId: '',
     geoResults: [],
     geoMessage: '',
     selectedLocationText: '',
     tagText: '',
+    aiPrompt: '',
+    aiCapabilities: {
+      sessionDraft: false,
+    },
     approvedMinimum: 1,
     options: {
       gameTypes: [],
@@ -62,6 +67,7 @@ Page({
     }
     this.ensureLogin();
     this.loadOptions();
+    this.loadAiCapabilities();
   },
 
   onShow() {
@@ -91,6 +97,17 @@ Page({
             budgetRanges: res.data.budgetRanges || [],
           },
           budgetPickerOptions: ['看局而定'].concat(res.data.budgetRanges || []),
+        });
+      }
+    });
+  },
+
+  loadAiCapabilities() {
+    if (!api.getToken()) return;
+    api.get('/api/ai/capabilities').then((res) => {
+      if (res.code === 0 && res.data && res.data.features) {
+        this.setData({
+          'aiCapabilities.sessionDraft': !!res.data.features.sessionDraft,
         });
       }
     });
@@ -159,6 +176,10 @@ Page({
     this.setData({ tagText: event.detail.value });
   },
 
+  onAiPromptInput(event) {
+    this.setData({ aiPrompt: event.detail.value });
+  },
+
   onValuePicker(event) {
     const field = event.currentTarget.dataset.field;
     this.setData({
@@ -224,6 +245,49 @@ Page({
       geoResults: [],
       geoMessage: '',
       selectedLocationText: '已选：' + place.name,
+    });
+  },
+
+  applyAiDraft(draft) {
+    const current = this.data.form;
+    const nextForm = Object.assign({}, current, {
+      gameType: draft.gameType || current.gameType,
+      title: draft.title || current.title,
+      city: draft.city || current.city,
+      area: draft.area || current.area,
+      address: draft.address || current.address,
+      playDate: draft.playDate || current.playDate,
+      playTime: draft.playTime || current.playTime,
+      playMode: draft.playMode || current.playMode,
+      budgetRange: draft.budgetRange === '看局而定' ? '' : (draft.budgetRange || current.budgetRange),
+      minPlayers: draft.minPlayers ? String(draft.minPlayers) : current.minPlayers,
+      maxPlayers: draft.maxPlayers ? String(draft.maxPlayers) : current.maxPlayers,
+      currentPlayers: draft.currentPlayers ? String(draft.currentPlayers) : current.currentPlayers,
+      note: draft.note || current.note,
+      contactNote: draft.contactNote || current.contactNote,
+    });
+    this.setData({
+      form: nextForm,
+      tagText: Array.isArray(draft.tags) ? draft.tags.join(', ') : this.data.tagText,
+    });
+  },
+
+  generateAiDraft() {
+    if (!this.ensureLogin()) return;
+    const prompt = this.data.aiPrompt.trim();
+    if (!prompt) {
+      wx.showToast({ title: '先描述想组的局', icon: 'none' });
+      return;
+    }
+    this.setData({ aiGenerating: true });
+    api.post('/api/ai/session-draft', { prompt }).then((res) => {
+      this.setData({ aiGenerating: false });
+      if (res.code === 0 && res.data && res.data.draft) {
+        this.applyAiDraft(res.data.draft);
+        wx.showToast({ title: '已生成草稿', icon: 'success' });
+      } else {
+        wx.showToast({ title: res.message || 'AI 暂不可用', icon: 'none' });
+      }
     });
   },
 

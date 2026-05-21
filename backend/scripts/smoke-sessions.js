@@ -58,6 +58,10 @@ function startServer() {
       TIANDITU_KEY: 'smoke-tianditu-key',
       TIANDITU_SEARCH_URL: GEO_BASE,
       WECHAT_LOGIN_DEV_MODE: 'true',
+      AI_ENABLED: 'true',
+      AI_PROVIDER: 'mock',
+      AI_MODEL: 'mock-v1',
+      AI_DAILY_LIMIT: '20',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -140,6 +144,8 @@ async function main() {
       health.data.tiandituConfigured !== true ||
       health.data.wechatLoginConfigured !== true ||
       health.data.wechatLoginDevMode !== true ||
+      !health.data.ai ||
+      health.data.ai.ready !== true ||
       !health.data.productScope.gameTypes.includes('血染钟楼') ||
       health.data.productScope.excludedGameTypes.includes('棋牌') === false
     ) {
@@ -190,6 +196,21 @@ async function main() {
       savedPrefs.data.wechatSubscribe.sessionStatus !== false
     ) {
       throw new Error('Notification preferences should be persisted');
+    }
+
+    const aiCapabilities = await request('GET', '/api/ai/capabilities', null, creatorToken);
+    if (!aiCapabilities.data.ready || !aiCapabilities.data.features.sessionDraft) {
+      throw new Error('AI mock capabilities should be available in smoke');
+    }
+    const aiDraft = await request('POST', '/api/ai/session-draft', {
+      prompt: '周五晚上海静安新手友好狼人杀，最好准时不鸽',
+    }, creatorToken);
+    if (
+      aiDraft.data.draft.gameType !== '狼人杀' ||
+      aiDraft.data.draft.city !== '上海' ||
+      !aiDraft.data.draft.tags.includes('新手友好')
+    ) {
+      throw new Error('AI session draft should produce structured tabletop session fields');
     }
 
     const emptyProfileMe = await request('GET', '/api/me', null, creatorToken);
@@ -384,6 +405,12 @@ async function main() {
     }
     if (detail.data.address !== '人民大道120号附近' || !detail.data.location) {
       throw new Error('Session location fields were not returned');
+    }
+    const aiMessage = await request('POST', '/api/ai/request-message', {
+      sessionId,
+    }, joinerToken);
+    if (!aiMessage.data.message || !aiMessage.data.message.includes('周五晚合作桌游局')) {
+      throw new Error('AI request message should reference target session');
     }
 
     const tempRequest = await request('POST', `/api/sessions/${sessionId}/requests`, {

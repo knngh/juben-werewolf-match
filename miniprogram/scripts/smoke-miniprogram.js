@@ -65,6 +65,7 @@ assert(sessionDetailSource.includes('loginUrlWithRedirect'), '局详情页未登
 assert(sessionDetailSource.includes('parseSessionId'), '局详情页应支持 scene 参数解析');
 assert(sessionDetailSource.includes('wx.setClipboardData'), '局详情页应支持复制微信号');
 assert(sessionDetailSource.includes('wx.showShareMenu'), '局详情页应显式启用分享菜单');
+assert(sessionDetailSource.includes('/api/ai/request-message'), '局详情页应接入 AI 申请留言接口');
 
 const sessionsSource = fs.readFileSync(path.join(root, 'pages/sessions/index.js'), 'utf8');
 assert(sessionsSource.includes('onShareAppMessage'), '找局页应支持分享');
@@ -73,6 +74,10 @@ assert(sessionsSource.includes('wx.showShareMenu'), '找局页应显式启用分
 const profileSource = fs.readFileSync(path.join(root, 'pages/profile/index.js'), 'utf8');
 assert(profileSource.includes('/api/notification-preferences'), '资料页应接入通知偏好 API');
 assert(profileSource.includes('wx.requestSubscribeMessage'), '资料页应接入微信订阅消息请求');
+
+const createSessionSource = fs.readFileSync(path.join(root, 'pages/create-session/index.js'), 'utf8');
+assert(createSessionSource.includes('/api/ai/session-draft'), '发布页应接入 AI 发布草稿接口');
+assert(createSessionSource.includes('/api/ai/capabilities'), '发布页应按后端能力显示 AI 按钮');
 
 assert(projectConfig.compileType === 'miniprogram', 'project.config.json compileType 应为 miniprogram');
 

@@ -78,6 +78,7 @@
         <picker range="{{certaintyLabels}}" value="{{certaintyIndex}}" bindchange="onCertaintyChange">
           <view class="picker-value">{{certaintyLabels[certaintyIndex]}}</view>
         </picker>
+        <button wx:if="{{aiCapabilities.requestMessage}}" class="btn btn-secondary btn-small ai-message-btn" loading="{{aiGeneratingMessage}}" bindtap="generateAiRequestMessage">AI 帮我写留言</button>
         <textarea class="textarea" value="{{message}}" bindinput="onMessageInput" maxlength="200" placeholder="简单介绍一下自己，比如常玩类型和时间是否确定" />
         <button class="btn btn-primary btn-full" loading="{{requesting}}" bindtap="requestJoin">发送申请</button>
       </view>

@@ -16,6 +16,8 @@
 - **申请加入**：玩家申请加入，局主审核；待审核可撤回，通过后展示联系方式
 - **站内通知**：新申请、审批结果、局状态变化会生成通知和未读提醒
 - **信任与安全**：支持举报、拉黑、局后反馈和可靠度摘要
+- **AI 规划**：优先做发布局助手、申请留言助手、匹配解释和运营洞察，详见 `docs/ai-feature-plan.md`
+- **AI 助手 MVP**：后端支持 mock AI，发布页可“AI 帮我填”，申请区可“AI 帮我写留言”
 - **发现**：按偏好相似度推荐用户，左滑跳过、右滑点赞
 - **匹配**：互相点赞即匹配，匹配列表可看对方简介与微信号
 
@@ -40,6 +42,16 @@ npm start
 API 默认：`http://localhost:3000`
 
 后端会读取 `backend/.env`，其中 `TIANDITU_KEY` 和 `WECHAT_MINIPROGRAM_SECRET` 只在服务端使用；前端和小程序不直接暴露 key/secret。
+
+AI 功能默认关闭。开发联调可设置：
+
+```bash
+AI_ENABLED=true
+AI_PROVIDER=mock
+AI_MODEL=mock-v1
+```
+
+真实模型接入时，模型 Key 只能放在后端 `.env` 的 `AI_API_KEY`。
 
 常用检查：
 

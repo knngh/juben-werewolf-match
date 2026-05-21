@@ -42,7 +42,8 @@
 }
 
 .copy-btn,
-.login-join-btn {
+.login-join-btn,
+.ai-message-btn {
   margin-top: 18rpx;
 }
 

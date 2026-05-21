@@ -50,10 +50,14 @@ Page({
     id: '',
     loading: true,
     requesting: false,
+    aiGeneratingMessage: false,
     session: null,
     isCreator: false,
     hasContact: false,
     hasToken: false,
+    aiCapabilities: {
+      requestMessage: false,
+    },
     requests: [],
     approvedRequests: [],
     message: '',
@@ -75,6 +79,7 @@ Page({
       hasToken: !!api.getToken(),
     });
     if (api.getToken()) {
+      this.loadAiCapabilities();
       app.refreshMe().then(() => this.load());
     } else {
       this.load();
@@ -86,6 +91,19 @@ Page({
     if (this.data.id) {
       this.load();
     }
+    if (api.getToken()) {
+      this.loadAiCapabilities();
+    }
+  },
+
+  loadAiCapabilities() {
+    api.get('/api/ai/capabilities').then((res) => {
+      if (res.code === 0 && res.data && res.data.features) {
+        this.setData({
+          'aiCapabilities.requestMessage': !!res.data.features.requestMessage,
+        });
+      }
+    });
   },
 
   load() {
@@ -151,6 +169,22 @@ Page({
 
   onMessageInput(event) {
     this.setData({ message: event.detail.value });
+  },
+
+  generateAiRequestMessage() {
+    if (!this.ensureLogin()) return;
+    this.setData({ aiGeneratingMessage: true });
+    api.post('/api/ai/request-message', {
+      sessionId: this.data.id,
+    }).then((res) => {
+      this.setData({ aiGeneratingMessage: false });
+      if (res.code === 0 && res.data && res.data.message) {
+        this.setData({ message: res.data.message });
+        wx.showToast({ title: '已生成留言', icon: 'success' });
+      } else {
+        wx.showToast({ title: res.message || 'AI 暂不可用', icon: 'none' });
+      }
+    });
   },
 
   requestJoin() {

@@ -16,6 +16,12 @@ const WECHAT_MINIPROGRAM_APPID = process.env.WECHAT_MINIPROGRAM_APPID || '';
 const WECHAT_MINIPROGRAM_SECRET = process.env.WECHAT_MINIPROGRAM_SECRET || '';
 const WECHAT_CODE2SESSION_URL = process.env.WECHAT_CODE2SESSION_URL || 'https://api.weixin.qq.com/sns/jscode2session';
 const WECHAT_LOGIN_DEV_MODE = process.env.WECHAT_LOGIN_DEV_MODE === 'true';
+const AI_ENABLED = process.env.AI_ENABLED === 'true';
+const AI_PROVIDER = process.env.AI_PROVIDER || '';
+const AI_API_KEY = process.env.AI_API_KEY || '';
+const AI_MODEL = process.env.AI_MODEL || '';
+const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 8000;
+const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT) || 200;
 
 app.use(cors());
 app.use(express.json());
@@ -61,6 +67,7 @@ app.get('/api/health', (req, res) => {
         tiandituConfigured: !!TIANDITU_KEY,
         wechatLoginConfigured: WECHAT_LOGIN_DEV_MODE || !!(WECHAT_MINIPROGRAM_APPID && WECHAT_MINIPROGRAM_SECRET),
         wechatLoginDevMode: WECHAT_LOGIN_DEV_MODE,
+        ai: getAiCapabilities(),
         productScope: {
           gameTypes: GAME_TYPES,
           excludedGameTypes: EXCLUDED_GAME_TYPES,
@@ -171,6 +178,125 @@ function toBooleanFlag(value, fallback = true) {
   if (value === true || value === 'true' || value === 1 || value === '1') return 1;
   if (value === false || value === 'false' || value === 0 || value === '0') return 0;
   return fallback ? 1 : 0;
+}
+
+function getAiCapabilities() {
+  const providerReady = AI_PROVIDER === 'mock' || !!AI_API_KEY;
+  const ready = AI_ENABLED && !!AI_PROVIDER && providerReady;
+  return {
+    enabled: AI_ENABLED,
+    ready,
+    provider: AI_PROVIDER || '',
+    model: AI_MODEL || '',
+    timeoutMs: AI_TIMEOUT_MS,
+    dailyLimit: AI_DAILY_LIMIT,
+    features: {
+      sessionDraft: ready,
+      requestMessage: ready,
+      matchExplanation: false,
+      opsSummary: false,
+    },
+  };
+}
+
+function requireAiReady(res, feature) {
+  const capabilities = getAiCapabilities();
+  if (!capabilities.enabled) {
+    res.status(503).json({ code: 503, message: 'AI 功能未开启', data: { feature, capabilities } });
+    return false;
+  }
+  if (!capabilities.ready) {
+    res.status(503).json({ code: 503, message: 'AI 服务未配置', data: { feature, capabilities } });
+    return false;
+  }
+  if (!capabilities.features[feature]) {
+    res.status(503).json({ code: 503, message: '该 AI 功能暂不可用', data: { feature, capabilities } });
+    return false;
+  }
+  return true;
+}
+
+function requireAiQuota(res, userId) {
+  const row = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM ai_usage_logs
+    WHERE user_id = ? AND date(created_at) = date('now')
+  `).get(userId);
+  if ((row.count || 0) >= AI_DAILY_LIMIT) {
+    res.status(429).json({ code: 429, message: '今日 AI 使用次数已达上限' });
+    return false;
+  }
+  return true;
+}
+
+function hashAiInput(value) {
+  return crypto.createHash('sha256').update(JSON.stringify(value || {})).digest('hex');
+}
+
+function logAiUsage({ userId, feature, input, outputStatus, startedAt }) {
+  db.prepare(`
+    INSERT INTO ai_usage_logs (user_id, feature, input_hash, output_status, provider, model, latency_ms)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    userId || null,
+    feature,
+    hashAiInput(input),
+    outputStatus,
+    AI_PROVIDER || '',
+    AI_MODEL || '',
+    Math.max(0, Date.now() - startedAt)
+  );
+}
+
+function pickFirstMention(text, values, fallback = '') {
+  return values.find((item) => text.includes(item)) || fallback;
+}
+
+function buildMockSessionDraft(prompt, profile = {}) {
+  const text = normalizeText(prompt, 300);
+  const gameType = pickFirstMention(text, GAME_TYPES, (profile.gameTypes || [])[0] || '桌游');
+  const playMode = text.includes('线上') ? '线上' : '线下';
+  const budgetRange = pickFirstMention(text, BUDGET_RANGES, profile.budgetRange || '看局而定');
+  const knownCities = ['北京', '上海', '广州', '深圳', '杭州', '成都', '南京', '武汉', '重庆', '西安', '苏州', '天津'];
+  const city = pickFirstMention(text, knownCities, profile.city || '');
+  const playTime = text.includes('上午') ? '10:00' : text.includes('下午') ? '14:00' : '19:30';
+  const maxPlayers = gameType === '狼人杀' || gameType === '血染钟楼' ? 10 : gameType === '跑团' ? 5 : 6;
+  const styleTags = PLAY_STYLES.filter((item) => text.includes(item.replace('型', '')) || text.includes(item));
+  const tags = normalizeTags([
+    text.includes('新手') ? '新手友好' : '',
+    text.includes('不鸽') || text.includes('准时') ? '准时不鸽' : '',
+    ...styleTags,
+    gameType,
+  ]);
+
+  return {
+    gameType,
+    title: normalizeText(`${city ? city : ''}${text.includes('周末') ? '周末' : text.includes('周五') ? '周五晚' : ''}${gameType}局`, 40) || `${gameType}组局`,
+    city,
+    area: '',
+    address: '',
+    playDate: '',
+    playTime,
+    playMode,
+    budgetRange,
+    minPlayers: gameType === '跑团' ? 3 : 2,
+    maxPlayers,
+    currentPlayers: 1,
+    tags,
+    note: normalizeText(`想组一个${tags.includes('新手友好') ? '新手友好、' : ''}氛围稳定的${gameType}局。${text ? `补充：${text}` : ''}`, 500),
+    contactNote: '申请通过后再交换联系方式或拉群。',
+  };
+}
+
+function buildMockRequestMessage(profile = {}, session = {}) {
+  const pieces = [
+    profile.city ? `我在${profile.city}` : '',
+    profile.gameTypes && profile.gameTypes.length ? `常玩${profile.gameTypes.slice(0, 2).join('、')}` : '',
+    profile.playStyles && profile.playStyles.length ? `偏好${profile.playStyles.slice(0, 2).join('、')}风格` : '',
+    profile.availability && profile.availability.length ? `${profile.availability[0]}通常有空` : '',
+  ].filter(Boolean);
+  const intro = pieces.length ? pieces.join('，') : '我对这个局比较感兴趣';
+  return normalizeText(`${intro}。看到“${session.title || '这个局'}”时间和类型都合适，希望能加入，会准时沟通不鸽。`, 200);
 }
 
 async function getWechatSession(code) {
@@ -868,6 +994,72 @@ app.post(
       );
     }
     res.json({ code: 0, message: '保存成功' });
+  }
+);
+
+app.get('/api/ai/capabilities', requireAuth, (req, res) => {
+  res.json({ code: 0, data: getAiCapabilities() });
+});
+
+app.post(
+  '/api/ai/session-draft',
+  requireAuth,
+  [
+    body('prompt').trim().isLength({ min: 1, max: 300 }).withMessage('请用 1-300 字描述想组的局'),
+  ],
+  (req, res) => {
+    if (!requireValidation(req, res)) return;
+    if (!requireAiReady(res, 'sessionDraft')) return;
+    if (!requireAiQuota(res, req.userId)) return;
+    const startedAt = Date.now();
+    const input = { prompt: req.body.prompt };
+    try {
+      if (AI_PROVIDER !== 'mock') {
+        logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'provider_not_implemented', startedAt });
+        return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
+      }
+      const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
+      const draft = buildMockSessionDraft(req.body.prompt, profile);
+      logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'ok', startedAt });
+      res.json({ code: 0, data: { draft, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
+    } catch (error) {
+      logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'error', startedAt });
+      res.status(500).json({ code: 500, message: '生成发布草稿失败' });
+    }
+  }
+);
+
+app.post(
+  '/api/ai/request-message',
+  requireAuth,
+  [
+    body('sessionId').isInt({ min: 1 }).withMessage('请选择要申请的局'),
+  ],
+  (req, res) => {
+    if (!requireValidation(req, res)) return;
+    if (!requireAiReady(res, 'requestMessage')) return;
+    if (!requireAiQuota(res, req.userId)) return;
+    const sessionId = Number(req.body.sessionId);
+    const startedAt = Date.now();
+    const input = { sessionId };
+    try {
+      const session = getSessionRow(sessionId);
+      if (!session) {
+        logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'not_found', startedAt });
+        return res.status(404).json({ code: 404, message: '游戏局不存在' });
+      }
+      if (AI_PROVIDER !== 'mock') {
+        logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'provider_not_implemented', startedAt });
+        return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
+      }
+      const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
+      const message = buildMockRequestMessage(profile, session);
+      logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'ok', startedAt });
+      res.json({ code: 0, data: { message, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
+    } catch (error) {
+      logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'error', startedAt });
+      res.status(500).json({ code: 500, message: '生成申请留言失败' });
+    }
   }
 );
 

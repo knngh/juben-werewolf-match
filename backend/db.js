@@ -141,6 +141,21 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, created_at);
+
+  CREATE TABLE IF NOT EXISTS ai_usage_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    feature TEXT NOT NULL,
+    input_hash TEXT,
+    output_status TEXT NOT NULL,
+    provider TEXT,
+    model TEXT,
+    latency_ms INTEGER,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_user ON ai_usage_logs(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_feature ON ai_usage_logs(feature, created_at);
 `);
 
 function ensureColumn(table, column, definition) {

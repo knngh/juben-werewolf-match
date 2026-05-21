@@ -4,6 +4,12 @@
 
   <view wx:if="{{loading}}" class="loading">加载中...</view>
   <view wx:else class="card form-card">
+    <view wx:if="{{aiCapabilities.sessionDraft && !isEdit}}" class="ai-panel">
+      <text class="label">AI 发布局助手</text>
+      <textarea class="textarea ai-textarea" value="{{aiPrompt}}" bindinput="onAiPromptInput" maxlength="300" placeholder="一句话描述想组的局，如：周五晚上海静安新手友好狼人杀" />
+      <button class="btn btn-secondary btn-small ai-btn" loading="{{aiGenerating}}" bindtap="generateAiDraft">AI 帮我填</button>
+    </view>
+
     <view class="field">
       <text class="label">类型</text>
       <picker range="{{options.gameTypes}}" value="{{pickerIndexes.gameType}}" data-field="gameType" data-list="gameTypes" bindchange="onPickerChange">
