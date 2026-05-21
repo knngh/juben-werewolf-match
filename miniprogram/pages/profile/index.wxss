@@ -1,0 +1,74 @@
+.login-card {
+  margin-top: 36rpx;
+}
+
+.login-btn {
+  margin-top: 24rpx;
+}
+
+.completion-card {
+  margin-top: 28rpx;
+}
+
+.completion-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #2c332d;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.completion-head text:last-child {
+  color: #1f7a4d;
+}
+
+.progress {
+  height: 14rpx;
+  margin-top: 18rpx;
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: #e1e7dc;
+}
+
+.progress view {
+  height: 100%;
+  border-radius: 999rpx;
+  background: #1f7a4d;
+}
+
+.profile-card {
+  position: relative;
+  padding-top: 26rpx;
+}
+
+.notify-head,
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.switch-row {
+  min-height: 78rpx;
+  border-top: 1rpx solid #e7ebe2;
+  color: #334033;
+  font-size: 27rpx;
+}
+
+.switch-row:first-of-type {
+  border-top: 0;
+}
+
+.starter-btn {
+  align-self: flex-end;
+}
+
+.save-btn {
+  margin-top: 28rpx;
+}
+
+.logout-btn {
+  margin-top: 24rpx;
+}

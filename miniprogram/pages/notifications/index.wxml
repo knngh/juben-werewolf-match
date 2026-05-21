@@ -1,0 +1,28 @@
+<view class="page">
+  <view class="toolbar">
+    <view>
+      <text class="title">通知</text>
+      <text class="subtitle">申请、审批和局状态变化</text>
+    </view>
+    <button wx:if="{{notifications.length}}" class="btn btn-secondary btn-small" bindtap="readAll">全读</button>
+  </view>
+
+  <view wx:if="{{!loggedIn}}" class="card login-card">
+    <text class="section-title">登录后查看通知</text>
+    <text class="hint">局主收到申请、申请人收到审批结果都会在这里显示。</text>
+    <button class="btn btn-primary btn-full login-btn" bindtap="goLogin">登录</button>
+  </view>
+
+  <view wx:elif="{{loading}}" class="loading">加载中...</view>
+  <view wx:elif="{{notifications.length === 0}}" class="empty">暂无通知</view>
+  <view wx:else class="list">
+    <view wx:for="{{notifications}}" wx:key="id" class="card notice-item {{item.readAt ? '' : 'notice-unread'}}" data-id="{{item.id}}" data-session-id="{{item.sessionId}}" bindtap="openNotice">
+      <view class="notice-head">
+        <text class="notice-title">{{item.title}}</text>
+        <text wx:if="{{!item.readAt}}" class="unread-dot"></text>
+      </view>
+      <text wx:if="{{item.body}}" class="notice-body">{{item.body}}</text>
+      <text class="notice-time">{{item.createdAt}}</text>
+    </view>
+  </view>
+</view>

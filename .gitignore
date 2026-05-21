@@ -2,6 +2,7 @@
 backend/node_modules/
 backend/data.db
 backend/.env
+backend/backups/
 
 # frontend
 frontend/node_modules/

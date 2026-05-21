@@ -1,0 +1,98 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="loading">加载中...</view>
+  <view wx:elif="{{!session}}" class="empty">这个局不存在</view>
+  <view wx:else>
+    <view class="card detail-card">
+      <view class="session-head">
+        <text class="status-pill">{{session.gameType}}</text>
+        <text class="seat">{{session.statusText}}</text>
+      </view>
+      <text class="detail-title">{{session.title}}</text>
+      <text class="detail-meta">{{session.placeText}}</text>
+      <text class="detail-meta">{{session.playDate}} {{session.playTime}} · {{session.playMode}}{{session.budgetRange ? ' · ' + session.budgetRange : ''}}</text>
+      <text class="detail-meta">{{session.currentPlayers}}/{{session.maxPlayers}} 人，剩余 {{session.seatsLeft}} 位</text>
+
+      <view wx:if="{{session.matchReasons && session.matchReasons.length}}" class="tag-row reason-row">
+        <text wx:for="{{session.matchReasons}}" wx:for-item="reason" wx:key="*this" class="reason">{{reason}}</text>
+      </view>
+
+      <view wx:if="{{session.tags && session.tags.length}}" class="tag-row tag-block">
+        <text wx:for="{{session.tags}}" wx:for-item="tag" wx:key="*this" class="tag">{{tag}}</text>
+      </view>
+
+      <text wx:if="{{session.note}}" class="note">{{session.note}}</text>
+      <view class="divider"></view>
+      <text class="creator">发起人：{{session.creator.nickname}}</text>
+    </view>
+
+    <view wx:if="{{hasContact}}" class="card">
+      <text class="section-title">联系方式</text>
+      <text wx:if="{{session.contactNote}}" class="detail-meta">{{session.contactNote}}</text>
+      <text wx:if="{{session.creator.wechat}}" class="contact-text">微信号：{{session.creator.wechat}}</text>
+    </view>
+
+    <view wx:if="{{isCreator}}" class="card">
+      <view class="owner-head">
+        <text class="section-title">局管理</text>
+        <button class="btn btn-secondary btn-small" bindtap="goEdit">编辑</button>
+      </view>
+      <view class="owner-actions">
+        <button wx:if="{{session.status !== 'open'}}" class="btn btn-secondary btn-small" data-status="open" bindtap="updateStatus">重新开放</button>
+        <button wx:if="{{session.status === 'open'}}" class="btn btn-secondary btn-small" data-status="closed" bindtap="updateStatus">标记满员</button>
+        <button wx:if="{{session.status !== 'cancelled'}}" class="btn btn-danger btn-small" data-status="cancelled" bindtap="updateStatus">取消</button>
+      </view>
+
+      <view class="divider"></view>
+      <text class="section-title">申请列表</text>
+      <view wx:if="{{requests.length === 0}}" class="empty small-empty">暂无申请</view>
+      <view wx:else class="request-list">
+        <view wx:if="{{approvedRequests.length}}" class="approved-box">
+          <text class="approved-title">已通过成员</text>
+          <text wx:for="{{approvedRequests}}" wx:key="id" class="approved-name">{{item.user.nickname}}</text>
+        </view>
+
+        <view wx:for="{{requests}}" wx:key="id" class="request-item">
+          <view class="request-main">
+            <text class="request-name">{{item.user.nickname}}</text>
+            <text class="request-meta">确定性：{{item.certaintyText}} · {{item.statusText}}</text>
+            <text class="request-meta">{{item.summary}}</text>
+            <text wx:if="{{item.reliabilityText}}" class="request-meta">{{item.reliabilityText}}</text>
+            <text wx:if="{{item.message}}" class="request-message">{{item.message}}</text>
+          </view>
+          <view wx:if="{{item.status === 'pending'}}" class="request-actions">
+            <button class="btn btn-primary btn-small" data-id="{{item.id}}" data-status="approved" bindtap="reviewRequest">同意</button>
+            <button class="btn btn-secondary btn-small" data-id="{{item.id}}" data-status="rejected" bindtap="reviewRequest">拒绝</button>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="card">
+      <text class="section-title">申请加入</text>
+      <text wx:if="{{session.requestStatus}}" class="detail-meta">当前状态：{{session.requestStatusText}}</text>
+      <view wx:if="{{session.canRequest}}" class="join-form">
+        <picker range="{{certaintyLabels}}" value="{{certaintyIndex}}" bindchange="onCertaintyChange">
+          <view class="picker-value">{{certaintyLabels[certaintyIndex]}}</view>
+        </picker>
+        <textarea class="textarea" value="{{message}}" bindinput="onMessageInput" maxlength="200" placeholder="简单介绍一下自己，比如常玩类型和时间是否确定" />
+        <button class="btn btn-primary btn-full" loading="{{requesting}}" bindtap="requestJoin">发送申请</button>
+      </view>
+      <text wx:elif="{{!session.requestStatus}}" class="detail-meta">当前无法申请这个局</text>
+    </view>
+
+    <view wx:if="{{session.requestStatus === 'approved' && session.creator}}" class="card">
+      <text class="section-title">局后反馈</text>
+      <checkbox-group bindchange="onFeedbackChange">
+        <label class="check-row"><checkbox value="punctual" checked="{{feedback.punctual}}" /> 准时</label>
+        <label class="check-row"><checkbox value="friendly" checked="{{feedback.friendly}}" /> 友好</label>
+        <label class="check-row"><checkbox value="wouldPlayAgain" checked="{{feedback.wouldPlayAgain}}" /> 愿意再约</label>
+      </checkbox-group>
+      <button class="btn btn-secondary btn-small feedback-btn" bindtap="sendFeedback">保存反馈</button>
+    </view>
+
+    <view wx:if="{{!isCreator && session.creator}}" class="safety-actions">
+      <button class="btn btn-secondary btn-small" bindtap="reportCreator">举报</button>
+      <button class="btn btn-danger btn-small" bindtap="blockCreator">拉黑</button>
+    </view>
+  </view>
+</view>

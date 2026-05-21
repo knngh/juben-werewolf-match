@@ -1,0 +1,119 @@
+<view class="page">
+  <view class="toolbar">
+    <view>
+      <text class="title">我的资料</text>
+      <text class="subtitle">完善偏好后，找局和推荐会更准</text>
+    </view>
+    <button wx:if="{{loggedIn}}" class="btn btn-secondary btn-small" bindtap="goNotifications">通知</button>
+  </view>
+
+  <view wx:if="{{!loggedIn}}" class="card login-card">
+    <text class="section-title">先登录后完善资料</text>
+    <text class="hint">资料用于推荐同城、时间、预算和玩法更合适的局。</text>
+    <button class="btn btn-primary btn-full login-btn" bindtap="goLogin">登录</button>
+  </view>
+
+  <view wx:elif="{{loading}}" class="loading">加载中...</view>
+  <view wx:else>
+    <view class="card completion-card">
+      <view class="completion-head">
+        <text>资料完整度</text>
+        <text>{{completeness.score}}%</text>
+      </view>
+      <view class="progress"><view style="width: {{completeness.score}}%;"></view></view>
+      <text class="hint">{{missingText || '资料已完整'}}</text>
+    </view>
+
+    <view class="card notify-card">
+      <view class="notify-head">
+        <text class="section-title">提醒设置</text>
+        <button class="btn btn-secondary btn-small" loading="{{subscribeLoading}}" bindtap="requestWechatSubscribe">微信订阅</button>
+      </view>
+      <view class="switch-row">
+        <text>新申请提醒</text>
+        <switch checked="{{notificationPrefs.requestUpdates}}" data-field="requestUpdates" bindchange="onNotificationSwitch" />
+      </view>
+      <view class="switch-row">
+        <text>审批结果提醒</text>
+        <switch checked="{{notificationPrefs.reviewResults}}" data-field="reviewResults" bindchange="onNotificationSwitch" />
+      </view>
+      <view class="switch-row">
+        <text>局状态提醒</text>
+        <switch checked="{{notificationPrefs.sessionStatus}}" data-field="sessionStatus" bindchange="onNotificationSwitch" />
+      </view>
+    </view>
+
+    <view class="card profile-card">
+      <button class="btn btn-secondary btn-small starter-btn" bindtap="applyStarterProfile">套用新手推荐</button>
+
+      <view class="field">
+        <text class="label">常玩类型</text>
+        <view class="chip-row">
+          <button wx:for="{{optionRows.gameTypes}}" wx:key="value" class="chip {{item.active ? 'chip-active' : ''}}" data-field="gameTypes" data-value="{{item.value}}" bindtap="toggleChip">{{item.value}}</button>
+        </view>
+      </view>
+
+      <view class="field">
+        <text class="label">游玩风格</text>
+        <view class="chip-row">
+          <button wx:for="{{optionRows.playStyles}}" wx:key="value" class="chip {{item.active ? 'chip-active' : ''}}" data-field="playStyles" data-value="{{item.value}}" bindtap="toggleChip">{{item.value}}</button>
+        </view>
+      </view>
+
+      <view class="field">
+        <text class="label">常有空的时间</text>
+        <view class="chip-row">
+          <button wx:for="{{optionRows.availabilityOptions}}" wx:key="value" class="chip {{item.active ? 'chip-active' : ''}}" data-field="availability" data-value="{{item.value}}" bindtap="toggleChip">{{item.value}}</button>
+        </view>
+      </view>
+
+      <view class="field">
+        <text class="label">偏好角色</text>
+        <view class="chip-row">
+          <button wx:for="{{optionRows.preferredRoles}}" wx:key="value" class="chip {{item.active ? 'chip-active' : ''}}" data-field="preferredRoles" data-value="{{item.value}}" bindtap="toggleChip">{{item.value}}</button>
+        </view>
+      </view>
+
+      <view class="row">
+        <view class="field">
+          <text class="label">预算偏好</text>
+          <picker range="{{budgetPickerOptions}}" value="{{pickerIndexes.budgetRange}}" bindchange="onBudgetChange">
+            <view class="picker-value {{profile.budgetRange ? '' : 'placeholder'}}">{{profile.budgetRange || '暂不填写'}}</view>
+          </picker>
+        </view>
+        <view class="field">
+          <text class="label">人数偏好</text>
+          <picker range="{{playerCountPickerOptions}}" value="{{pickerIndexes.playerCountRange}}" bindchange="onPlayerCountChange">
+            <view class="picker-value {{profile.playerCountRange ? '' : 'placeholder'}}">{{profile.playerCountRange || '暂不填写'}}</view>
+          </picker>
+        </view>
+      </view>
+
+      <view class="field">
+        <text class="label">线上/线下</text>
+        <view class="chip-row">
+          <button wx:for="{{optionRows.playModes}}" wx:key="value" class="chip {{item.active ? 'chip-active' : ''}}" data-field="playModes" data-value="{{item.value}}" bindtap="toggleChip">{{item.value}}</button>
+        </view>
+      </view>
+
+      <view class="field">
+        <text class="label">常玩频率</text>
+        <input class="input" value="{{profile.playFreq}}" data-field="playFreq" bindinput="onInput" placeholder="如：每周 1-2 次" />
+      </view>
+
+      <view class="field">
+        <text class="label">所在城市</text>
+        <input class="input" value="{{profile.city}}" data-field="city" bindinput="onInput" placeholder="如：上海" />
+      </view>
+
+      <view class="field">
+        <text class="label">个人简介</text>
+        <textarea class="textarea" value="{{profile.intro}}" data-field="intro" bindinput="onInput" maxlength="300" placeholder="介绍一下自己，方便同好认识你" />
+      </view>
+
+      <button class="btn btn-primary btn-full save-btn" loading="{{saving}}" bindtap="save">保存</button>
+    </view>
+
+    <button class="btn btn-secondary btn-full logout-btn" bindtap="logout">退出登录</button>
+  </view>
+</view>

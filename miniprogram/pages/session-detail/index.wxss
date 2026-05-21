@@ -1,0 +1,163 @@
+.detail-card {
+  margin-top: 0;
+}
+
+.session-head,
+.owner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.seat,
+.creator {
+  color: #697166;
+  font-size: 25rpx;
+}
+
+.detail-title {
+  display: block;
+  margin-top: 18rpx;
+  color: #172019;
+  font-size: 42rpx;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.detail-meta,
+.note,
+.contact-text {
+  display: block;
+  margin-top: 10rpx;
+  color: #697166;
+  font-size: 26rpx;
+  line-height: 1.55;
+}
+
+.contact-text {
+  color: #1f7a4d;
+  font-weight: 700;
+}
+
+.tag-block,
+.reason-row {
+  margin-top: 18rpx;
+}
+
+.reason {
+  display: inline-flex;
+  min-height: 48rpx;
+  align-items: center;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  background: #eaf5ef;
+  color: #1f7a4d;
+  font-size: 23rpx;
+}
+
+.owner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.small-empty {
+  padding: 34rpx 16rpx;
+}
+
+.request-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.approved-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  padding: 18rpx;
+  border-radius: 12rpx;
+  background: #f2f7ee;
+}
+
+.approved-title {
+  width: 100%;
+  color: #334033;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.approved-name {
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: #ffffff;
+  color: #1f7a4d;
+  font-size: 24rpx;
+}
+
+.request-item {
+  display: flex;
+  gap: 16rpx;
+  justify-content: space-between;
+  padding-top: 18rpx;
+  border-top: 1rpx solid #e7ebe2;
+}
+
+.request-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.request-name {
+  display: block;
+  color: #20231f;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.request-meta,
+.request-message {
+  display: block;
+  margin-top: 8rpx;
+  color: #697166;
+  font-size: 24rpx;
+  line-height: 1.45;
+}
+
+.request-message {
+  color: #334033;
+}
+
+.request-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  flex-shrink: 0;
+}
+
+.join-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+  margin-top: 18rpx;
+}
+
+.check-row {
+  display: block;
+  margin-top: 16rpx;
+  color: #334033;
+  font-size: 27rpx;
+}
+
+.feedback-btn {
+  margin-top: 20rpx;
+}
+
+.safety-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14rpx;
+  margin-top: 20rpx;
+}

@@ -11,7 +11,12 @@
           <h3 class="name">{{ u.nickname }}</h3>
           <p v-if="u.intro" class="intro">{{ u.intro }}</p>
           <p v-if="u.city" class="city">{{ u.city }}</p>
+          <p v-if="u.reliability && u.reliability.total" class="city">可靠度 {{ u.reliability.score }}%</p>
           <p v-if="u.wechat" class="wechat">微信号：{{ u.wechat }}</p>
+          <div class="match-actions">
+            <button class="btn btn-ghost mini danger" type="button" @click="reportUser(u)">举报</button>
+            <button class="btn btn-ghost mini danger" type="button" @click="blockUser(u)">拉黑</button>
+          </div>
         </div>
       </div>
     </div>
@@ -32,6 +37,26 @@ async function load() {
   if (res.code === 0 && Array.isArray(res.data)) list.value = res.data
 }
 
+async function reportUser(u) {
+  const detail = window.prompt('简单说明举报原因')
+  if (detail === null) return
+  const res = await api.post('/api/reports', {
+    targetUserId: u.id,
+    reason: '其他',
+    detail,
+  })
+  if (res.code === 0) alert('举报已提交')
+  else alert(res.message || '举报失败')
+}
+
+async function blockUser(u) {
+  const ok = window.confirm(`确定拉黑 ${u.nickname} 吗？`)
+  if (!ok) return
+  const res = await api.post(`/api/block/${u.id}`, {})
+  if (res.code === 0) list.value = list.value.filter((item) => item.id !== u.id)
+  else alert(res.message || '操作失败')
+}
+
 onMounted(load)
 </script>
 
@@ -46,4 +71,7 @@ onMounted(load)
 .name { margin: 0 0 4px; font-size: 18px; }
 .intro, .city { font-size: 13px; color: #a1a1aa; margin: 0 0 2px; }
 .wechat { font-size: 13px; color: #a78bfa; margin: 8px 0 0; }
+.match-actions { display: flex; gap: 8px; margin-top: 10px; }
+.mini { padding: 6px 10px; border-radius: 8px; font-size: 12px; }
+.danger { color: #fca5a5; }
 </style>

@@ -1,0 +1,50 @@
+.login-card {
+  margin-top: 36rpx;
+}
+
+.login-btn {
+  margin-top: 24rpx;
+}
+
+.notice-item {
+  margin-top: 0;
+}
+
+.notice-unread {
+  border-color: #b7d7c2;
+  background: #fbfffb;
+}
+
+.notice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.notice-title {
+  color: #172019;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.unread-dot {
+  width: 16rpx;
+  height: 16rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #1f7a4d;
+}
+
+.notice-body,
+.notice-time {
+  display: block;
+  margin-top: 10rpx;
+  color: #697166;
+  font-size: 25rpx;
+  line-height: 1.5;
+}
+
+.notice-time {
+  font-size: 23rpx;
+}

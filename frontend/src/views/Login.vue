@@ -2,7 +2,7 @@
   <div class="page">
     <div class="card" style="margin-top: 48px;">
       <h1 class="title">本杀匹配</h1>
-      <p class="subtitle">剧本杀 · 狼人杀 · 找同好</p>
+      <p class="subtitle">剧本杀 · 狼人杀 · 桌游 · 找搭子</p>
       <form @submit.prevent="submit" class="form">
         <input v-model="phone" type="text" placeholder="手机号或微信号" class="input" />
         <input v-model="password" type="password" placeholder="密码" class="input" />
@@ -35,7 +35,9 @@ async function submit() {
   })
   if (res.code === 0 && res.data) {
     userStore.setAuth(res.data.token, { userId: res.data.userId, nickname: res.data.nickname })
-    router.replace('/discover')
+    await userStore.fetchMe()
+    const score = userStore.user?.profileCompleteness?.score || 0
+    router.replace(score < 100 ? '/profile' : '/sessions')
   } else {
     err.value = res.message || '登录失败'
     alert(err.value)

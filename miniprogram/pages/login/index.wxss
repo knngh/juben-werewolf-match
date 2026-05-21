@@ -1,0 +1,37 @@
+.login-page {
+  padding-top: 88rpx;
+}
+
+.hero {
+  margin-bottom: 36rpx;
+}
+
+.mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10rpx;
+  padding: 8rpx;
+  border-radius: 14rpx;
+  background: #eef2e9;
+}
+
+.mode-tab {
+  min-height: 64rpx;
+  border-radius: 10rpx;
+  color: #5e665a;
+  font-size: 27rpx;
+}
+
+.mode-active {
+  background: #ffffff;
+  color: #1f7a4d;
+  font-weight: 700;
+}
+
+.submit {
+  margin-top: 28rpx;
+}
+
+.wechat-btn {
+  margin-bottom: 8rpx;
+}

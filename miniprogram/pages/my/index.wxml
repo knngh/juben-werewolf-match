@@ -1,0 +1,68 @@
+<view class="page">
+  <view class="toolbar">
+    <view>
+      <text class="title">我的局</text>
+      <text class="subtitle">管理你发布和申请过的桌游局</text>
+    </view>
+    <button class="btn btn-primary btn-small" bindtap="goCreate">发布</button>
+  </view>
+
+  <view wx:if="{{!loggedIn}}" class="card login-card">
+    <text class="section-title">先登录后查看</text>
+    <text class="hint">登录后可以管理发布、申请和审批记录。</text>
+    <button class="btn btn-primary btn-full login-btn" bindtap="goLogin">登录</button>
+  </view>
+
+  <view wx:elif="{{loading}}" class="loading">加载中...</view>
+  <view wx:else>
+    <view class="section">
+      <text class="section-title">我发布的</text>
+      <view wx:if="{{created.length === 0}}" class="empty small-empty">还没有发布过局</view>
+      <view wx:else class="list">
+        <view wx:for="{{created}}" wx:key="id" class="card session-card">
+          <view class="session-main" data-id="{{item.id}}" bindtap="goDetail">
+            <view class="session-head">
+              <text class="status-pill">{{item.gameType}}</text>
+              <text class="seat">{{item.statusText}}</text>
+            </view>
+            <text class="session-title">{{item.title}}</text>
+            <text class="session-meta">{{item.placeText}}</text>
+            <text class="session-meta">{{item.playDate}} {{item.playTime}} · {{item.seatText}}</text>
+            <view wx:if="{{item.requestCounts}}" class="count-row">
+              <text>待审 {{item.requestCounts.pending || 0}}</text>
+              <text>已通过 {{item.requestCounts.approved || 0}}</text>
+              <text>已拒绝 {{item.requestCounts.rejected || 0}}</text>
+            </view>
+          </view>
+          <view class="card-actions">
+            <button class="btn btn-secondary btn-small" data-id="{{item.id}}" bindtap="goDetail">看申请</button>
+            <button class="btn btn-secondary btn-small" data-id="{{item.id}}" bindtap="goEdit">编辑</button>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="section">
+      <text class="section-title">我申请的</text>
+      <view wx:if="{{requested.length === 0}}" class="empty small-empty">还没有申请过局</view>
+      <view wx:else class="list">
+        <view wx:for="{{requested}}" wx:key="requestKey" class="card session-card">
+          <view class="session-main" data-id="{{item.id}}" bindtap="goDetail">
+            <view class="session-head">
+              <text class="status-pill">{{item.requestStatusText}}</text>
+              <text class="seat">{{item.gameType}}</text>
+            </view>
+            <text class="session-title">{{item.title}}</text>
+            <text class="session-meta">{{item.placeText}}</text>
+            <text class="session-meta">{{item.playDate}} {{item.playTime}} · {{item.certaintyText || '未填写确定性'}}</text>
+            <view wx:if="{{item.requestStatus === 'approved'}}" class="contact-box">
+              <text wx:if="{{item.contactNote}}">{{item.contactNote}}</text>
+              <text wx:if="{{item.creator && item.creator.wechat}}">微信号：{{item.creator.wechat}}</text>
+            </view>
+          </view>
+          <button wx:if="{{item.requestStatus === 'pending' && item.requestId}}" class="btn btn-secondary btn-small withdraw" data-id="{{item.requestId}}" bindtap="withdraw">撤回申请</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

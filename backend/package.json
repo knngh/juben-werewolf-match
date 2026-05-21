@@ -1,14 +1,19 @@
 {
   "name": "juben-werewolf-match-api",
   "version": "1.0.0",
-  "description": "剧本杀/狼人杀交友匹配 API",
+  "description": "桌游搭子匹配 API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "smoke:sessions": "node scripts/smoke-sessions.js",
+    "seed:demo": "node scripts/seed-demo.js",
+    "backup:db": "node scripts/backup-db.js",
+    "cleanup:expired": "node scripts/cleanup-expired-sessions.js",
+    "smoke:prod": "node scripts/prod-smoke.js"
   },
   "dependencies": {
-    "better-sqlite3": "^9.2.2",
+    "better-sqlite3": "^12.10.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "express-validator": "^7.0.1",

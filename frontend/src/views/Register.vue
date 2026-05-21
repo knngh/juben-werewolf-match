@@ -37,6 +37,7 @@ async function submit() {
   })
   if (res.code === 0 && res.data) {
     userStore.setAuth(res.data.token, { userId: res.data.userId, nickname: res.data.nickname })
+    await userStore.fetchMe()
     router.replace('/profile')
   } else {
     alert(res.message || '注册失败')

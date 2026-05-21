@@ -1,0 +1,73 @@
+<view class="page">
+  <view class="toolbar">
+    <view>
+      <text class="title">找桌游局</text>
+      <text class="subtitle">剧本杀、狼人杀、血染钟楼、桌游、跑团</text>
+    </view>
+    <button class="btn btn-primary btn-small" bindtap="goCreate">发布</button>
+  </view>
+
+  <view wx:if="{{needsProfile}}" class="card notice-card">
+    <view>
+      <text class="notice-title">资料还可以再补充</text>
+      <text class="hint">还差：{{missingText}}</text>
+    </view>
+    <button class="btn btn-secondary btn-small" bindtap="goProfile">去完善</button>
+  </view>
+
+  <view class="card filter-card">
+    <view class="row">
+      <picker class="picker-field" range="{{options.gameTypes}}" value="{{pickerIndexes.gameType}}" data-field="gameType" data-list="gameTypes" bindchange="onPickerFilter">
+        <view class="picker-value {{filters.gameType ? '' : 'placeholder'}}">{{filters.gameType || '全部类型'}}</view>
+      </picker>
+      <picker class="picker-field" range="{{options.playModes}}" value="{{pickerIndexes.playMode}}" data-field="playMode" data-list="playModes" bindchange="onPickerFilter">
+        <view class="picker-value {{filters.playMode ? '' : 'placeholder'}}">{{filters.playMode || '线上/线下'}}</view>
+      </picker>
+    </view>
+
+    <view class="row">
+      <picker class="picker-field" range="{{options.budgetRanges}}" value="{{pickerIndexes.budgetRange}}" data-field="budgetRange" data-list="budgetRanges" bindchange="onPickerFilter">
+        <view class="picker-value {{filters.budgetRange ? '' : 'placeholder'}}">{{filters.budgetRange || '全部预算'}}</view>
+      </picker>
+      <picker class="picker-field" range="{{seatOptions}}" value="{{pickerIndexes.minSeats}}" data-field="minSeats" data-list="seatOptions" bindchange="onSeatFilter">
+        <view class="picker-value {{filters.minSeats ? '' : 'placeholder'}}">{{seatText}}</view>
+      </picker>
+    </view>
+
+    <view class="row">
+      <input class="input" value="{{filters.city}}" data-field="city" bindinput="onFilterInput" confirm-type="search" bindconfirm="loadSessions" placeholder="城市" />
+      <input class="input" value="{{filters.q}}" data-field="q" bindinput="onFilterInput" confirm-type="search" bindconfirm="loadSessions" placeholder="关键词" />
+    </view>
+
+    <view class="preset-row">
+      <button wx:for="{{datePresets}}" wx:key="value" class="preset {{filters.datePreset === item.value ? 'preset-active' : ''}}" data-value="{{item.value}}" bindtap="applyDatePreset">{{item.label}}</button>
+    </view>
+
+    <view class="row action-row">
+      <button class="btn btn-secondary" bindtap="loadSessions">筛选</button>
+      <button class="btn btn-secondary" loading="{{nearbyLoading}}" bindtap="useNearby">附近 20km</button>
+      <button class="btn btn-secondary" bindtap="resetFilters">清空</button>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading">加载中...</view>
+  <view wx:elif="{{sessions.length === 0}}" class="empty">暂无开放中的局</view>
+  <view wx:else class="list">
+    <view wx:for="{{sessions}}" wx:key="id" class="card session-card" data-id="{{item.id}}" bindtap="goDetail">
+      <view class="session-head">
+        <text class="status-pill">{{item.gameType}}</text>
+        <text class="seat">{{item.seatText}}</text>
+      </view>
+      <text class="session-title">{{item.title}}</text>
+      <text class="session-meta">{{item.placeText}}</text>
+      <text class="session-meta">{{item.playDate}} {{item.playTime}} · {{item.playMode}}{{item.budgetRange ? ' · ' + item.budgetRange : ''}}{{item.distanceText ? ' · ' + item.distanceText : ''}}</text>
+      <view wx:if="{{item.matchReasons && item.matchReasons.length}}" class="tag-row reason-row">
+        <text wx:for="{{item.matchReasons}}" wx:for-item="reason" wx:key="*this" class="reason">{{reason}}</text>
+      </view>
+      <view wx:if="{{item.tags && item.tags.length}}" class="tag-row">
+        <text wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" class="tag">{{tag}}</text>
+      </view>
+      <text wx:if="{{item.note}}" class="note">{{item.note}}</text>
+    </view>
+  </view>
+</view>

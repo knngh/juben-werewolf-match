@@ -1,0 +1,97 @@
+.notice-card {
+  display: flex;
+  gap: 18rpx;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notice-title {
+  display: block;
+  color: #2f3a2f;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.filter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.filter-card .row {
+  margin-top: 0;
+}
+
+.preset-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12rpx;
+}
+
+.preset {
+  min-height: 60rpx;
+  border: 1rpx solid #d5ddd0;
+  border-radius: 10rpx;
+  color: #5d655b;
+  font-size: 24rpx;
+}
+
+.preset-active {
+  border-color: #1f7a4d;
+  background: #e1f1e7;
+  color: #1f7a4d;
+  font-weight: 700;
+}
+
+.action-row .btn {
+  flex: 1;
+  padding: 0 10rpx;
+}
+
+.session-card {
+  margin-top: 0;
+}
+
+.session-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+}
+
+.seat {
+  color: #697166;
+  font-size: 24rpx;
+}
+
+.session-title {
+  display: block;
+  color: #172019;
+  font-size: 34rpx;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.session-meta,
+.note {
+  display: block;
+  margin-top: 10rpx;
+  color: #697166;
+  font-size: 25rpx;
+  line-height: 1.55;
+}
+
+.reason-row {
+  margin-top: 16rpx;
+}
+
+.reason {
+  display: inline-flex;
+  min-height: 48rpx;
+  align-items: center;
+  padding: 0 16rpx;
+  border-radius: 999rpx;
+  background: #eaf5ef;
+  color: #1f7a4d;
+  font-size: 23rpx;
+}

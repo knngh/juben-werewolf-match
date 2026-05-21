@@ -1,0 +1,111 @@
+<view class="page">
+  <text class="title">{{isEdit ? '编辑这局' : '发布一局'}}</text>
+  <text class="subtitle">只发布桌游、剧本杀、狼人杀、跑团相关局</text>
+
+  <view wx:if="{{loading}}" class="loading">加载中...</view>
+  <view wx:else class="card form-card">
+    <view class="field">
+      <text class="label">类型</text>
+      <picker range="{{options.gameTypes}}" value="{{pickerIndexes.gameType}}" data-field="gameType" data-list="gameTypes" bindchange="onPickerChange">
+        <view class="picker-value {{form.gameType ? '' : 'placeholder'}}">{{form.gameType || '请选择类型'}}</view>
+      </picker>
+    </view>
+
+    <view class="field">
+      <text class="label">标题</text>
+      <input class="input" value="{{form.title}}" data-field="title" bindinput="onInput" maxlength="40" placeholder="如：周五晚新手友好狼人杀" />
+    </view>
+
+    <view class="row">
+      <view class="field">
+        <text class="label">城市</text>
+        <input class="input" value="{{form.city}}" data-field="city" bindinput="onLocationInput" placeholder="上海" />
+      </view>
+      <view class="field">
+        <text class="label">区域</text>
+        <input class="input" value="{{form.area}}" data-field="area" bindinput="onLocationInput" placeholder="静安" />
+      </view>
+    </view>
+
+    <view class="field">
+      <text class="label">地点</text>
+      <view class="location-row">
+        <input class="input" value="{{form.address}}" data-field="address" bindinput="onLocationInput" placeholder="地点、商圈或地标" />
+        <button class="btn btn-secondary location-btn" loading="{{geoSearching}}" bindtap="searchPlaces">搜索</button>
+      </view>
+      <text wx:if="{{selectedLocationText}}" class="hint">{{selectedLocationText}}</text>
+      <text wx:elif="{{geoMessage}}" class="hint">{{geoMessage}}</text>
+      <view wx:if="{{geoResults.length}}" class="place-list">
+        <view wx:for="{{geoResults}}" wx:key="key" class="place-item" data-index="{{index}}" bindtap="selectPlace">
+          <text class="place-name">{{item.name}}</text>
+          <text class="place-meta">{{item.city}}{{item.area ? ' · ' + item.area : ''}}{{item.address ? ' · ' + item.address : ''}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="row">
+      <view class="field">
+        <text class="label">日期</text>
+        <picker mode="date" value="{{form.playDate}}" data-field="playDate" bindchange="onValuePicker">
+          <view class="picker-value {{form.playDate ? '' : 'placeholder'}}">{{form.playDate || '选择日期'}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <text class="label">时间</text>
+        <picker mode="time" value="{{form.playTime}}" data-field="playTime" bindchange="onValuePicker">
+          <view class="picker-value {{form.playTime ? '' : 'placeholder'}}">{{form.playTime || '选择时间'}}</view>
+        </picker>
+      </view>
+    </view>
+
+    <view class="row">
+      <view class="field">
+        <text class="label">玩法</text>
+        <picker range="{{options.playModes}}" value="{{pickerIndexes.playMode}}" data-field="playMode" data-list="playModes" bindchange="onPickerChange">
+          <view class="picker-value">{{form.playMode || '线下'}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <text class="label">预算</text>
+        <picker range="{{budgetPickerOptions}}" value="{{pickerIndexes.budgetRange}}" data-field="budgetRange" data-list="budgetPickerOptions" bindchange="onBudgetPicker">
+          <view class="picker-value {{form.budgetRange ? '' : 'placeholder'}}">{{form.budgetRange || '看局而定'}}</view>
+        </picker>
+      </view>
+    </view>
+
+    <view class="row">
+      <view class="field">
+        <text class="label">最低人数</text>
+        <input class="input" value="{{form.minPlayers}}" data-field="minPlayers" bindinput="onInput" type="number" />
+      </view>
+      <view class="field">
+        <text class="label">已有人数</text>
+        <input class="input" value="{{form.currentPlayers}}" data-field="currentPlayers" bindinput="onInput" type="number" />
+      </view>
+      <view class="field">
+        <text class="label">目标人数</text>
+        <input class="input" value="{{form.maxPlayers}}" data-field="maxPlayers" bindinput="onInput" type="number" />
+      </view>
+    </view>
+    <text wx:if="{{approvedMinimum > 1}}" class="hint">已通过 {{approvedMinimum - 1}} 人，已有人数至少 {{approvedMinimum}}</text>
+
+    <view class="field">
+      <text class="label">标签</text>
+      <input class="input" value="{{tagText}}" bindinput="onTagInput" placeholder="新手友好, 阵营, 不鸽" />
+    </view>
+
+    <view class="field">
+      <text class="label">局说明</text>
+      <textarea class="textarea" value="{{form.note}}" data-field="note" bindinput="onInput" maxlength="500" placeholder="说清楚玩法、氛围、是否接受新手" />
+    </view>
+
+    <view class="field">
+      <text class="label">通过后联系方式说明</text>
+      <textarea class="textarea" value="{{form.contactNote}}" data-field="contactNote" bindinput="onInput" maxlength="200" placeholder="如：通过后拉微信群，或发微信号" />
+    </view>
+
+    <button class="btn btn-primary btn-full submit" loading="{{submitting}}" bindtap="submit">
+      {{isEdit ? '保存' : '发布'}}
+    </button>
+  </view>
+</view>

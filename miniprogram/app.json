@@ -1,0 +1,48 @@
+{
+  "pages": [
+    "pages/sessions/index",
+    "pages/create-session/index",
+    "pages/my/index",
+    "pages/profile/index",
+    "pages/login/index",
+    "pages/session-detail/index",
+    "pages/notifications/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "桌游搭子",
+    "navigationBarBackgroundColor": "#f7f8f4",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f7f8f4"
+  },
+  "tabBar": {
+    "color": "#7b8075",
+    "selectedColor": "#1f7a4d",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/sessions/index",
+        "text": "找局"
+      },
+      {
+        "pagePath": "pages/my/index",
+        "text": "我的局"
+      },
+      {
+        "pagePath": "pages/notifications/index",
+        "text": "通知"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的"
+      }
+    ]
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于按距离筛选附近桌游局"
+    }
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

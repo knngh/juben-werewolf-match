@@ -1,18 +1,29 @@
-# 本杀匹配 · 剧本杀 / 狼人杀交友
+# 本杀匹配 · 桌游搭子匹配
 
-类似 Taste 的**偏好匹配**：根据游戏类型、游玩风格、偏好角色等找到同好，互相点赞即匹配，可查看微信号联系。
+面向剧本杀、狼人杀、血染钟楼、桌游、跑团等桌游类活动的**搭子匹配**应用。用户可以按偏好发现同好，也可以发布一局、申请加入、通过后查看联系方式。
+
+当前方向不做实体店铺、商家后台、支付，也不纳入麻将、德州扑克、象棋、围棋、扑克等棋牌类游戏。
 
 ## 功能
 
+- **Plan 0 基线**：健康检查、demo seed、后端环境变量、冒烟测试
 - **注册/登录**：手机号或微信号 + 密码
-- **我的资料**：常玩类型（剧本杀/狼人杀/血染钟楼等）、游玩风格（推理/欢乐/沉浸等）、偏好角色、频率、城市、简介
+- **小程序微信登录**：小程序端可用 `wx.login` 换取本应用登录态
+- **我的资料**：常玩类型、游玩风格、常有空的时间、预算、人数组合、线上/线下、城市、简介
+- **找局**：浏览开放中的桌游局，按类型、城市、日期、剩余席位、关键词、预算、线上/线下筛选，并展示匹配理由
+- **发布一局**：填写类型、人数、时间、地点、预算、线上/线下、标签和通过后的联系方式说明；地点可通过天地图搜索并保存坐标
+- **编辑局**：局主可修改时间、人数、预算、标签、说明和联系方式
+- **申请加入**：玩家申请加入，局主审核；待审核可撤回，通过后展示联系方式
+- **站内通知**：新申请、审批结果、局状态变化会生成通知和未读提醒
+- **信任与安全**：支持举报、拉黑、局后反馈和可靠度摘要
 - **发现**：按偏好相似度推荐用户，左滑跳过、右滑点赞
 - **匹配**：互相点赞即匹配，匹配列表可看对方简介与微信号
 
 ## 技术栈
 
 - **后端**：Node.js + Express + SQLite + JWT
-- **前端**：Vue 3 + Vite + Vue Router + Pinia
+- **小程序主端**：微信小程序原生页面
+- **Web 调试端**：Vue 3 + Vite + Vue Router + Pinia
 
 ## 本地运行
 
@@ -21,11 +32,30 @@
 ```bash
 cd backend
 cp .env.example .env
+# 在 .env 中配置 TIANDITU_KEY，用于地点搜索；小程序微信登录需配置 WECHAT_MINIPROGRAM_APPID / WECHAT_MINIPROGRAM_SECRET
 npm install
 npm start
 ```
 
 API 默认：`http://localhost:3000`
+
+后端会读取 `backend/.env`，其中 `TIANDITU_KEY` 和 `WECHAT_MINIPROGRAM_SECRET` 只在服务端使用；前端和小程序不直接暴露 key/secret。
+
+常用检查：
+
+```bash
+curl http://localhost:3000/api/health
+npm run smoke:sessions
+npm run seed:demo
+npm run backup:db
+npm run cleanup:expired
+```
+
+本地 smoke 会使用 `WECHAT_LOGIN_DEV_MODE=true` 模拟微信登录。生产环境不要开启这个开关。
+
+`npm run seed:demo` 会重建 `demo_` 前缀的演示账号，不会清理其他真实账号。演示账号微信号：`demo_creator`、`demo_joiner`、`demo_social`、`demo_keeper`，密码均为 `123456`。
+
+上线检查见：[docs/launch-checklist.md](docs/launch-checklist.md)。
 
 ### 前端
 
@@ -36,6 +66,40 @@ npm run dev
 ```
 
 开发环境已配置代理，前端请求 `/api` 会转发到 `http://localhost:3000`。浏览器打开：`http://localhost:5173`。
+
+### 微信小程序
+
+当前正式用户端以小程序为主，Web 端保留为调试和 H5 备份。
+
+1. 先启动后端：
+
+   ```bash
+   cd backend
+   npm start
+   ```
+
+2. 用微信开发者工具打开 `miniprogram/` 目录。
+3. 本地调试默认请求 `http://127.0.0.1:3000`，配置在 `miniprogram/config.js`。
+4. 真机或线上版本需要把 `apiBaseUrl` 改成 HTTPS API 域名，并在微信公众平台配置 request 合法域名。
+5. 小程序微信登录需要后端 `.env` 配置 `WECHAT_MINIPROGRAM_APPID` 和 `WECHAT_MINIPROGRAM_SECRET`。
+6. 订阅消息模板 ID 配置在 `miniprogram/config.js` 的 `subscribeTemplateIds`，未配置时只保存站内提醒偏好。
+
+小程序首版页面：
+
+- 找局：筛选开放局、附近 20km、查看详情
+- 登录：支持微信登录，也保留手机号/微信号 + 密码登录
+- 发布：发布/编辑桌游局、地点搜索走后端天地图代理
+- 局详情：申请、审批、联系方式、举报、拉黑、局后反馈
+- 我的局：发布记录、申请记录、撤回待审核申请
+- 通知：申请/审批/局状态通知
+- 我的：资料完整度、偏好维护、退出登录
+- 提醒设置：保存申请、审批、局状态提醒偏好；模板配置完成后可请求微信订阅消息
+
+静态检查：
+
+```bash
+node miniprogram/scripts/smoke-miniprogram.js
+```
 
 ### 生产构建
 
@@ -64,7 +128,7 @@ npm start
    cd juben-werewolf-match
    git init
    git add .
-   git commit -m "feat: 剧本杀狼人杀交友匹配（Taste 式偏好匹配）"
+   git commit -m "feat: 桌游搭子匹配"
    git branch -M main
    git remote add origin https://github.com/你的用户名/juben-werewolf-match.git
    git push -u origin main
@@ -88,17 +152,24 @@ juben-werewolf-match/
 │   ├── server.js
 │   ├── db.js
 │   ├── auth.js
+│   ├── env.js
 │   ├── package.json
 │   └── .env.example
 ├── frontend/          # Vue 3 前端
 │   ├── src/
-│   │   ├── views/     # 登录、注册、资料、发现、匹配
+│   │   ├── views/     # 登录、注册、资料、找局、发现、匹配
 │   │   ├── stores/
 │   │   ├── router/
 │   │   └── api.js
 │   ├── index.html
 │   ├── vite.config.js
 │   └── package.json
+├── miniprogram/       # 微信小程序主端
+│   ├── pages/         # 找局、发布、详情、我的局、通知、资料
+│   ├── utils/
+│   ├── config.js
+│   ├── app.json
+│   └── project.config.json
 ├── .gitignore
 └── README.md
 ```

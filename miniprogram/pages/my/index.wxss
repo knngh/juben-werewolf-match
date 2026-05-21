@@ -1,0 +1,84 @@
+.login-card {
+  margin-top: 36rpx;
+}
+
+.login-btn {
+  margin-top: 24rpx;
+}
+
+.small-empty {
+  padding: 34rpx 16rpx;
+}
+
+.session-card {
+  margin-top: 0;
+}
+
+.session-main {
+  display: block;
+}
+
+.session-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14rpx;
+}
+
+.seat {
+  color: #697166;
+  font-size: 24rpx;
+}
+
+.session-title {
+  display: block;
+  color: #172019;
+  font-size: 32rpx;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.session-meta {
+  display: block;
+  margin-top: 8rpx;
+  color: #697166;
+  font-size: 25rpx;
+  line-height: 1.45;
+}
+
+.count-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 16rpx;
+}
+
+.count-row text {
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: #eaf5ef;
+  color: #1f7a4d;
+  font-size: 23rpx;
+}
+
+.card-actions {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.contact-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-top: 16rpx;
+  padding: 18rpx;
+  border-radius: 12rpx;
+  background: #f2f7ee;
+  color: #1f7a4d;
+  font-size: 25rpx;
+}
+
+.withdraw {
+  margin-top: 18rpx;
+}
