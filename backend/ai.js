@@ -453,7 +453,7 @@ function parseOpenRouterJson(payload) {
   if (!content) {
     const error = new Error('AI provider response missing content');
     error.status = 502;
-    error.retryable = false;
+    error.retryable = true;
     throw error;
   }
   try {

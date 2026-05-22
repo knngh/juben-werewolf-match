@@ -101,9 +101,29 @@ function startOpenRouterMock() {
         }));
         return;
       }
+      if (schemaName === 'request_message' && schemaCallCount === 1) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          id: `openrouter-smoke-${calls.length}`,
+          choices: [
+            {
+              message: {},
+            },
+          ],
+          usage: {
+            prompt_tokens: 7,
+            completion_tokens: 0,
+            total_tokens: 7,
+            cost: 0,
+          },
+        }));
+        return;
+      }
       const content = schemaName === 'report_classification'
         ? '{not valid json'
-        : JSON.stringify({
+        : schemaName === 'request_message'
+          ? JSON.stringify({ message: '我在上海，周末晚上方便参加，会准时沟通。' })
+          : JSON.stringify({
           gameType: '桌游',
           title: '上海周五晚桌游局',
           city: '上海',
@@ -422,6 +442,33 @@ async function runOpenRouterSmoke() {
     if (headers['http-referer'] !== 'https://example.com' || headers['x-openrouter-title'] !== 'juben smoke') {
       throw new Error('OpenRouter optional app headers should be forwarded');
     }
+    const session = await requestAt(OPENROUTER_BASE, 'POST', '/api/sessions', {
+      gameType: '桌游',
+      title: '周五晚轻策桌游局',
+      city: '上海',
+      area: '静安',
+      address: '人民大道120号',
+      playDate: '2026-06-01',
+      playTime: '19:30',
+      playMode: '线下',
+      budgetRange: '100-200',
+      minPlayers: 3,
+      maxPlayers: 5,
+      currentPlayers: 2,
+      tags: ['新手友好', '轻策'],
+      note: '欢迎不鸽的同好。',
+      contactNote: '匹配后拉微信群。',
+    }, user.data.token);
+    const message = await requestAt(OPENROUTER_BASE, 'POST', '/api/ai/request-message', {
+      sessionId: session.data.id,
+    }, user.data.token);
+    if (
+      message.data.provider !== 'openrouter' ||
+      message.data.message !== '我在上海，周末晚上方便参加，会准时沟通。' ||
+      openRouterMock.calls.length !== 4
+    ) {
+      throw new Error('OpenRouter request message should retry once after an empty content response');
+    }
     const failedClassification = await expectFailureAt(OPENROUTER_BASE, 'POST', '/api/ai/report-classification', {
       reason: '骚扰',
       detail: '对方一直私信骚扰',
@@ -437,6 +484,7 @@ async function runOpenRouterSmoke() {
         ORDER BY id ASC
       `).all();
       const sessionDraftLog = logs.find((item) => item.feature === 'sessionDraft');
+      const requestMessageLog = logs.find((item) => item.feature === 'requestMessage');
       const classificationLog = logs.find((item) => item.feature === 'reportClassification');
       if (
         !sessionDraftLog ||
@@ -450,9 +498,20 @@ async function runOpenRouterSmoke() {
         throw new Error('OpenRouter successful usage metadata should be logged');
       }
       if (
+        !requestMessageLog ||
+        requestMessageLog.output_status !== 'ok' ||
+        requestMessageLog.provider_request_id !== 'openrouter-smoke-4' ||
+        requestMessageLog.prompt_tokens !== 12 ||
+        requestMessageLog.completion_tokens !== 8 ||
+        requestMessageLog.total_tokens !== 20 ||
+        requestMessageLog.cost_credits !== 0
+      ) {
+        throw new Error('OpenRouter retried request message usage metadata should be logged');
+      }
+      if (
         !classificationLog ||
         classificationLog.output_status !== 'error' ||
-        classificationLog.provider_request_id !== 'openrouter-smoke-3' ||
+        classificationLog.provider_request_id !== 'openrouter-smoke-5' ||
         classificationLog.prompt_tokens !== 9 ||
         classificationLog.completion_tokens !== 3 ||
         classificationLog.total_tokens !== 12 ||
