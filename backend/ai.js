@@ -41,6 +41,16 @@ function normalizeInteger(value, min, max, fallback) {
   return Math.min(max, Math.max(min, number));
 }
 
+function normalizeUsageInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : null;
+}
+
+function normalizeUsageNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
 function normalizeAiTextOutput(value, maxLength, fallback = '') {
   return normalizeText(value, maxLength) || fallback;
 }
@@ -433,9 +443,25 @@ function parseOpenRouterJson(payload) {
   }
 }
 
-function createAiProviderError(message, status) {
+function normalizeOpenRouterMeta(payload = {}) {
+  const usage = payload && payload.usage ? payload.usage : {};
+  return {
+    providerRequestId: normalizeText(payload && payload.id, 120),
+    promptTokens: normalizeUsageInteger(usage.prompt_tokens),
+    completionTokens: normalizeUsageInteger(usage.completion_tokens),
+    totalTokens: normalizeUsageInteger(usage.total_tokens),
+    costCredits: normalizeUsageNumber(usage.cost),
+  };
+}
+
+function createAiResult(data, meta = {}) {
+  return { data, meta };
+}
+
+function createAiProviderError(message, status, meta = {}) {
   const error = new Error(message);
   error.status = status;
+  error.aiMeta = meta;
   return error;
 }
 
@@ -471,16 +497,22 @@ async function callOpenRouterJson(config = {}, messages, responseFormat) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(payload.error && payload.error.message ? payload.error.message : 'OpenRouter request failed');
-      error.status = response.status === 429 ? 429 : 502;
+      throw createAiProviderError(
+        payload.error && payload.error.message ? payload.error.message : 'OpenRouter request failed',
+        response.status === 429 ? 429 : 502,
+        normalizeOpenRouterMeta(payload)
+      );
+    }
+    const meta = normalizeOpenRouterMeta(payload);
+    try {
+      return createAiResult(parseOpenRouterJson(payload), meta);
+    } catch (error) {
+      error.aiMeta = meta;
       throw error;
     }
-    return parseOpenRouterJson(payload);
   } catch (error) {
     if (error.name === 'AbortError') {
-      const timeoutError = new Error('OpenRouter request timed out');
-      timeoutError.status = 504;
-      throw timeoutError;
+      throw createAiProviderError('OpenRouter request timed out', 504);
     }
     throw error;
   } finally {
@@ -499,9 +531,9 @@ function buildSystemPrompt() {
 
 async function generateSessionDraft(config, prompt, profile = {}, options = {}) {
   if (config.provider === 'mock') {
-    return normalizeAiSessionDraft(buildMockSessionDraft(prompt, profile, options), profile, options);
+    return createAiResult(normalizeAiSessionDraft(buildMockSessionDraft(prompt, profile, options), profile, options));
   }
-  const draft = await callOpenRouterJson(config, [
+  const result = await callOpenRouterJson(config, [
     { role: 'system', content: buildSystemPrompt() },
     {
       role: 'user',
@@ -521,12 +553,12 @@ async function generateSessionDraft(config, prompt, profile = {}, options = {}) 
       }),
     },
   ], buildSessionDraftSchema(options));
-  return normalizeAiSessionDraft(draft, profile, options);
+  return createAiResult(normalizeAiSessionDraft(result.data, profile, options), result.meta);
 }
 
 async function generateRequestMessage(config, profile = {}, session = {}) {
   if (config.provider === 'mock') {
-    return normalizeAiTextOutput(buildMockRequestMessage(profile, session), 200, '我对这个局比较感兴趣，希望能加入。');
+    return createAiResult(normalizeAiTextOutput(buildMockRequestMessage(profile, session), 200, '我对这个局比较感兴趣，希望能加入。'));
   }
   const result = await callOpenRouterJson(config, [
     { role: 'system', content: buildSystemPrompt() },
@@ -551,16 +583,19 @@ async function generateRequestMessage(config, profile = {}, session = {}) {
       }),
     },
   ], buildTextObjectSchema('request_message', 'message', 200));
-  return normalizeAiTextOutput(result.message, 200, '我对这个局比较感兴趣，希望能加入。');
+  return createAiResult(
+    normalizeAiTextOutput(result.data.message, 200, '我对这个局比较感兴趣，希望能加入。'),
+    result.meta
+  );
 }
 
 async function generateMatchExplanation(config, profile = {}, session = {}, reasons = []) {
   if (config.provider === 'mock') {
-    return normalizeAiTextOutput(
+    return createAiResult(normalizeAiTextOutput(
       buildMockMatchExplanation(profile, session, reasons),
       220,
       '可以结合时间、地点、预算和局主说明判断是否适合你。'
-    );
+    ));
   }
   const result = await callOpenRouterJson(config, [
     { role: 'system', content: buildSystemPrompt() },
@@ -583,12 +618,15 @@ async function generateMatchExplanation(config, profile = {}, session = {}, reas
       }),
     },
   ], buildTextObjectSchema('match_explanation', 'explanation', 220));
-  return normalizeAiTextOutput(result.explanation, 220, '可以结合时间、地点、预算和局主说明判断是否适合你。');
+  return createAiResult(
+    normalizeAiTextOutput(result.data.explanation, 220, '可以结合时间、地点、预算和局主说明判断是否适合你。'),
+    result.meta
+  );
 }
 
 async function classifyReport(config, input = {}, options = {}) {
   if (config.provider === 'mock') {
-    return normalizeAiReportClassification(buildMockReportClassification(input, options), options);
+    return createAiResult(normalizeAiReportClassification(buildMockReportClassification(input, options), options));
   }
   const result = await callOpenRouterJson(config, [
     { role: 'system', content: buildSystemPrompt() },
@@ -602,12 +640,12 @@ async function classifyReport(config, input = {}, options = {}) {
       }),
     },
   ], buildReportClassificationSchema(options));
-  return normalizeAiReportClassification(result, options);
+  return createAiResult(normalizeAiReportClassification(result.data, options), result.meta);
 }
 
 async function generateOpsSummary(config, snapshot = {}) {
   if (config.provider === 'mock') {
-    return normalizeAiOpsSummary(buildMockOpsSummary(snapshot), snapshot);
+    return createAiResult(normalizeAiOpsSummary(buildMockOpsSummary(snapshot), snapshot));
   }
   const result = await callOpenRouterJson(config, [
     { role: 'system', content: buildSystemPrompt() },
@@ -619,7 +657,7 @@ async function generateOpsSummary(config, snapshot = {}) {
       }),
     },
   ], buildOpsSummarySchema());
-  return normalizeAiOpsSummary(result, snapshot);
+  return createAiResult(normalizeAiOpsSummary(result.data, snapshot), result.meta);
 }
 
 module.exports = {

@@ -3,6 +3,7 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const Database = require('better-sqlite3');
 const ai = require('../ai');
 
 const PORT = 3127;
@@ -79,31 +80,45 @@ function startOpenRouterMock() {
         return;
       }
 
+      const schemaName = payload.response_format && payload.response_format.json_schema
+        ? payload.response_format.json_schema.name
+        : '';
+      const content = schemaName === 'report_classification'
+        ? '{not valid json'
+        : JSON.stringify({
+          gameType: '桌游',
+          title: '上海周五晚桌游局',
+          city: '上海',
+          area: '',
+          address: '',
+          playDate: '',
+          playTime: '19:30',
+          playMode: '线下',
+          budgetRange: '看局而定',
+          minPlayers: 2,
+          maxPlayers: 6,
+          currentPlayers: 1,
+          tags: ['新手友好', '桌游'],
+          note: '想组一个新手友好的桌游局。',
+          contactNote: '申请通过后再交换联系方式或拉群。',
+        });
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
+        id: `openrouter-smoke-${calls.length}`,
         choices: [
           {
             message: {
-              content: JSON.stringify({
-                gameType: '桌游',
-                title: '上海周五晚桌游局',
-                city: '上海',
-                area: '',
-                address: '',
-                playDate: '',
-                playTime: '19:30',
-                playMode: '线下',
-                budgetRange: '看局而定',
-                minPlayers: 2,
-                maxPlayers: 6,
-                currentPlayers: 1,
-                tags: ['新手友好', '桌游'],
-                note: '想组一个新手友好的桌游局。',
-                contactNote: '申请通过后再交换联系方式或拉群。',
-              }),
+              content,
             },
           },
         ],
+        usage: {
+          prompt_tokens: schemaName === 'report_classification' ? 9 : 12,
+          completion_tokens: schemaName === 'report_classification' ? 3 : 8,
+          total_tokens: schemaName === 'report_classification' ? 12 : 20,
+          cost: 0,
+        },
       }));
     });
   });
@@ -303,10 +318,11 @@ async function runAiProviderGuardSmoke() {
 
 async function runOpenRouterSmoke() {
   const openRouterMock = startOpenRouterMock();
+  const openRouterDbPath = path.join(tmpDir, 'openrouter-provider.db');
   await listen(openRouterMock, OPENROUTER_PORT);
   const server = startServer({
     port: OPENROUTER_BACKEND_PORT,
-    dbPath: path.join(tmpDir, 'openrouter-provider.db'),
+    dbPath: openRouterDbPath,
     aiProvider: 'openrouter',
     aiApiKey: 'fake-openrouter-key',
     aiModel: '',
@@ -344,6 +360,47 @@ async function runOpenRouterSmoke() {
     const headers = openRouterMock.calls[0].headers;
     if (headers['http-referer'] !== 'https://example.com' || headers['x-openrouter-title'] !== 'juben smoke') {
       throw new Error('OpenRouter optional app headers should be forwarded');
+    }
+    const failedClassification = await expectFailureAt(OPENROUTER_BASE, 'POST', '/api/ai/report-classification', {
+      reason: '骚扰',
+      detail: '对方一直私信骚扰',
+    }, user.data.token);
+    if (failedClassification.code !== 502) {
+      throw new Error('OpenRouter invalid structured output should fail as upstream error');
+    }
+    const logDb = new Database(openRouterDbPath, { readonly: true });
+    try {
+      const logs = logDb.prepare(`
+        SELECT feature, output_status, provider_request_id, prompt_tokens, completion_tokens, total_tokens, cost_credits
+        FROM ai_usage_logs
+        ORDER BY id ASC
+      `).all();
+      const sessionDraftLog = logs.find((item) => item.feature === 'sessionDraft');
+      const classificationLog = logs.find((item) => item.feature === 'reportClassification');
+      if (
+        !sessionDraftLog ||
+        sessionDraftLog.output_status !== 'ok' ||
+        sessionDraftLog.provider_request_id !== 'openrouter-smoke-1' ||
+        sessionDraftLog.prompt_tokens !== 12 ||
+        sessionDraftLog.completion_tokens !== 8 ||
+        sessionDraftLog.total_tokens !== 20 ||
+        sessionDraftLog.cost_credits !== 0
+      ) {
+        throw new Error('OpenRouter successful usage metadata should be logged');
+      }
+      if (
+        !classificationLog ||
+        classificationLog.output_status !== 'error' ||
+        classificationLog.provider_request_id !== 'openrouter-smoke-2' ||
+        classificationLog.prompt_tokens !== 9 ||
+        classificationLog.completion_tokens !== 3 ||
+        classificationLog.total_tokens !== 12 ||
+        classificationLog.cost_credits !== 0
+      ) {
+        throw new Error('OpenRouter failed structured output usage metadata should be logged');
+      }
+    } finally {
+      logDb.close();
     }
   } finally {
     server.kill();
@@ -739,6 +796,8 @@ async function main() {
       !aiOpsSummary.data.summary.includes('开放举报') ||
       aiOpsSummary.data.stats.openReports < 1 ||
       !Array.isArray(aiOpsSummary.data.requestBreakdown) ||
+      !aiOpsSummary.data.aiUsage ||
+      aiOpsSummary.data.aiUsage.today.requests < 4 ||
       !aiOpsSummary.data.actions.length
     ) {
       throw new Error('AI ops summary should include report and action signals');

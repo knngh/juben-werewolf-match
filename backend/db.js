@@ -186,6 +186,12 @@ ensureColumn('game_sessions', 'location_lat', 'REAL');
 
 ensureColumn('session_requests', 'certainty', "TEXT DEFAULT 'confirmed'");
 
+ensureColumn('ai_usage_logs', 'provider_request_id', 'TEXT');
+ensureColumn('ai_usage_logs', 'prompt_tokens', 'INTEGER');
+ensureColumn('ai_usage_logs', 'completion_tokens', 'INTEGER');
+ensureColumn('ai_usage_logs', 'total_tokens', 'INTEGER');
+ensureColumn('ai_usage_logs', 'cost_credits', 'REAL');
+
 db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mp_openid ON users(mp_openid) WHERE mp_openid IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_users_mp_unionid ON users(mp_unionid);

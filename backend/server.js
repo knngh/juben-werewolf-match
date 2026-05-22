@@ -260,10 +260,13 @@ function hashAiInput(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value || {})).digest('hex');
 }
 
-function logAiUsage({ userId, feature, input, outputStatus, startedAt }) {
+function logAiUsage({ userId, feature, input, outputStatus, startedAt, aiMeta = {} }) {
   db.prepare(`
-    INSERT INTO ai_usage_logs (user_id, feature, input_hash, output_status, provider, model, latency_ms)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO ai_usage_logs (
+      user_id, feature, input_hash, output_status, provider, model, latency_ms,
+      provider_request_id, prompt_tokens, completion_tokens, total_tokens, cost_credits
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     userId || null,
     feature,
@@ -271,7 +274,12 @@ function logAiUsage({ userId, feature, input, outputStatus, startedAt }) {
     outputStatus,
     AI_PROVIDER || '',
     getAiModel(),
-    Math.max(0, Date.now() - startedAt)
+    Math.max(0, Date.now() - startedAt),
+    aiMeta.providerRequestId || null,
+    aiMeta.promptTokens ?? null,
+    aiMeta.completionTokens ?? null,
+    aiMeta.totalTokens ?? null,
+    aiMeta.costCredits ?? null
   );
 }
 
@@ -294,6 +302,40 @@ function getOpsStats(userId) {
     pendingRequests,
     openReports: reports,
     myUnreadNotifications: unreadNotifications,
+  };
+}
+
+function serializeAiUsageStats(row = {}) {
+  return {
+    requests: row.requests || 0,
+    errors: row.errors || 0,
+    totalTokens: row.total_tokens || 0,
+    costCredits: Number(row.cost_credits || 0),
+  };
+}
+
+function getAiUsageStats() {
+  const last7Days = db.prepare(`
+    SELECT
+      COUNT(*) AS requests,
+      SUM(CASE WHEN output_status = 'error' THEN 1 ELSE 0 END) AS errors,
+      SUM(COALESCE(total_tokens, 0)) AS total_tokens,
+      SUM(COALESCE(cost_credits, 0)) AS cost_credits
+    FROM ai_usage_logs
+    WHERE created_at >= datetime('now', '-7 days')
+  `).get();
+  const today = db.prepare(`
+    SELECT
+      COUNT(*) AS requests,
+      SUM(CASE WHEN output_status = 'error' THEN 1 ELSE 0 END) AS errors,
+      SUM(COALESCE(total_tokens, 0)) AS total_tokens,
+      SUM(COALESCE(cost_credits, 0)) AS cost_credits
+    FROM ai_usage_logs
+    WHERE date(created_at) = date('now')
+  `).get();
+  return {
+    today: serializeAiUsageStats(today),
+    last7Days: serializeAiUsageStats(last7Days),
   };
 }
 
@@ -325,6 +367,7 @@ function getOpsSignalSnapshot(userId) {
     stats,
     reportBreakdown,
     requestBreakdown,
+    aiUsage: getAiUsageStats(),
     feedback: {
       total: feedback.total || 0,
       punctual: feedback.punctual || 0,
@@ -1050,11 +1093,11 @@ app.post(
     const input = { prompt: req.body.prompt };
     try {
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
-      const draft = await ai.generateSessionDraft(getAiConfig(), req.body.prompt, profile, AI_OPTIONS);
-      logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'ok', startedAt });
-      res.json({ code: 0, data: { draft, provider: AI_PROVIDER, model: getAiModel() } });
+      const result = await ai.generateSessionDraft(getAiConfig(), req.body.prompt, profile, AI_OPTIONS);
+      logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      res.json({ code: 0, data: { draft: result.data, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'error', startedAt });
+      logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成发布草稿失败');
     }
   }
@@ -1080,11 +1123,11 @@ app.post(
         return res.status(404).json({ code: 404, message: '游戏局不存在' });
       }
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
-      const message = await ai.generateRequestMessage(getAiConfig(), profile, session);
-      logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'ok', startedAt });
-      res.json({ code: 0, data: { message, provider: AI_PROVIDER, model: getAiModel() } });
+      const result = await ai.generateRequestMessage(getAiConfig(), profile, session);
+      logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      res.json({ code: 0, data: { message: result.data, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'error', startedAt });
+      logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成申请留言失败');
     }
   }
@@ -1111,11 +1154,11 @@ app.post(
       }
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
       const match = scoreSessionMatch(session, profile);
-      const explanation = await ai.generateMatchExplanation(getAiConfig(), profile, session, match.reasons);
-      logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'ok', startedAt });
-      res.json({ code: 0, data: { explanation, reasons: match.reasons, provider: AI_PROVIDER, model: getAiModel() } });
+      const result = await ai.generateMatchExplanation(getAiConfig(), profile, session, match.reasons);
+      logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      res.json({ code: 0, data: { explanation: result.data, reasons: match.reasons, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'error', startedAt });
+      logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成匹配说明失败');
     }
   }
@@ -1141,11 +1184,11 @@ app.post(
     }
     const startedAt = Date.now();
     try {
-      const classification = await ai.classifyReport(getAiConfig(), input, AI_OPTIONS);
-      logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'ok', startedAt });
-      res.json({ code: 0, data: { classification, provider: AI_PROVIDER, model: getAiModel() } });
+      const result = await ai.classifyReport(getAiConfig(), input, AI_OPTIONS);
+      logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      res.json({ code: 0, data: { classification: result.data, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'error', startedAt });
+      logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成举报归类失败');
     }
   }
@@ -1158,8 +1201,9 @@ app.get('/api/ai/ops-summary', requireAuth, async (req, res) => {
   const input = { scope: 'ops-summary' };
   try {
     const snapshot = getOpsSignalSnapshot(req.userId);
-    const summary = await ai.generateOpsSummary(getAiConfig(), snapshot);
-    logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'ok', startedAt });
+    const result = await ai.generateOpsSummary(getAiConfig(), snapshot);
+    const summary = result.data;
+    logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
     res.json({
       code: 0,
       data: {
@@ -1167,13 +1211,14 @@ app.get('/api/ai/ops-summary', requireAuth, async (req, res) => {
         stats: snapshot.stats,
         reportBreakdown: snapshot.reportBreakdown,
         requestBreakdown: snapshot.requestBreakdown,
+        aiUsage: snapshot.aiUsage,
         feedback: snapshot.feedback,
         provider: AI_PROVIDER,
         model: getAiModel(),
       },
     });
   } catch (error) {
-    logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'error', startedAt });
+    logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
     sendAiError(res, error, '生成运营摘要失败');
   }
 });

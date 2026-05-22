@@ -135,10 +135,15 @@ ai_usage_logs
 - provider
 - model
 - latency_ms
+- provider_request_id
+- prompt_tokens
+- completion_tokens
+- total_tokens
+- cost_credits
 - created_at
 ```
 
-默认不落原始输入和输出，先记录 hash 和状态，降低隐私风险。
+默认不落原始输入和输出，记录 hash、状态、延迟、token 和 provider 成本元数据，降低隐私风险并保留成本观察能力。
 
 ### 降级策略
 
@@ -180,8 +185,9 @@ ai_usage_logs
 - provider 能力表：未实现供应商不会向前端暴露 ready 功能。
 - provider 模块：AI 能力、mock 输出和结构化归一化集中在 `backend/ai.js`。
 - OpenRouter provider：`AI_PROVIDER=openrouter` 时走 OpenRouter Chat Completions 兼容接口，默认模型 `openrouter/free`。
+- OpenRouter 用量元数据：provider request id、tokens 和 cost credits 会写入 `ai_usage_logs`，并在运营摘要中提供聚合统计。
 - AI 输出归一化：发布草稿、留言、匹配解释、举报归类和运营摘要返回前都会走结构化校验。
-- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要、未实现 provider guard、OpenRouter fake provider 和输出归一化。
+- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要、未实现 provider guard、OpenRouter fake provider、用量记录和结构化异常。
 
 小程序 UI 已接入：
 
@@ -193,5 +199,5 @@ ai_usage_logs
 下一步是真实模型供应商完善：
 
 - 用真实 OpenRouter key 做生产前联调。
-- 为真实 provider 加入重试和成本统计。
-- 针对真实 provider 补结构化输出异常 smoke。
+- 为真实 provider 加入重试。
+- 根据首批真实调用校准成本展示和告警阈值。
