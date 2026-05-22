@@ -224,6 +224,41 @@ function getAiModel() {
   return getAiCapabilities().model || 'mock';
 }
 
+function roundAiCost(value) {
+  return Math.round(Number(value || 0) * 1000000) / 1000000;
+}
+
+function getAiDailyRequestCount(userId) {
+  const row = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM ai_usage_logs
+    WHERE user_id = ? AND date(created_at) = date('now')
+  `).get(userId);
+  return row.count || 0;
+}
+
+function getAiDailyCostUsed() {
+  const row = db.prepare(`
+    SELECT SUM(COALESCE(cost_credits, 0)) AS cost
+    FROM ai_usage_logs
+    WHERE date(created_at) = date('now')
+  `).get();
+  return roundAiCost(row.cost || 0);
+}
+
+function getAiQuotaSnapshot(userId) {
+  const dailyRequestUsed = getAiDailyRequestCount(userId);
+  const dailyCostUsed = getAiDailyCostUsed();
+  return {
+    dailyRequestUsed,
+    dailyRequestRemaining: Math.max(0, AI_DAILY_LIMIT - dailyRequestUsed),
+    dailyCostUsed,
+    dailyCostRemaining: AI_DAILY_COST_LIMIT > 0
+      ? roundAiCost(Math.max(0, AI_DAILY_COST_LIMIT - dailyCostUsed))
+      : null,
+  };
+}
+
 function requireAiReady(res, feature) {
   const capabilities = getAiCapabilities();
   if (!capabilities.enabled) {
@@ -254,22 +289,12 @@ function requireAiReady(res, feature) {
 }
 
 function requireAiQuota(res, userId) {
-  const row = db.prepare(`
-    SELECT COUNT(*) AS count
-    FROM ai_usage_logs
-    WHERE user_id = ? AND date(created_at) = date('now')
-  `).get(userId);
-  if ((row.count || 0) >= AI_DAILY_LIMIT) {
+  if (getAiDailyRequestCount(userId) >= AI_DAILY_LIMIT) {
     res.status(429).json({ code: 429, message: '今日 AI 使用次数已达上限' });
     return false;
   }
   if (AI_DAILY_COST_LIMIT > 0) {
-    const costRow = db.prepare(`
-      SELECT SUM(COALESCE(cost_credits, 0)) AS cost
-      FROM ai_usage_logs
-      WHERE date(created_at) = date('now')
-    `).get();
-    if (Number(costRow.cost || 0) >= AI_DAILY_COST_LIMIT) {
+    if (getAiDailyCostUsed() >= AI_DAILY_COST_LIMIT) {
       res.status(429).json({ code: 429, message: '今日 AI 成本预算已达上限' });
       return false;
     }
@@ -1097,7 +1122,13 @@ app.post(
 );
 
 app.get('/api/ai/capabilities', requireAuth, (req, res) => {
-  res.json({ code: 0, data: getAiCapabilities() });
+  res.json({
+    code: 0,
+    data: {
+      ...getAiCapabilities(),
+      quota: getAiQuotaSnapshot(req.userId),
+    },
+  });
 });
 
 app.post(

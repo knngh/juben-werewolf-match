@@ -372,8 +372,15 @@ async function runAiCostLimitSmoke() {
       password: '123456',
     });
     const capabilities = await requestAt(AI_COST_GUARD_BASE, 'GET', '/api/ai/capabilities', null, user.data.token);
-    if (capabilities.data.dailyCostLimit !== 0.5) {
-      throw new Error('AI capabilities should expose daily cost limit');
+    if (
+      capabilities.data.dailyCostLimit !== 0.5 ||
+      !capabilities.data.quota ||
+      capabilities.data.quota.dailyRequestUsed !== 0 ||
+      capabilities.data.quota.dailyRequestRemaining !== 20 ||
+      capabilities.data.quota.dailyCostUsed !== 0 ||
+      capabilities.data.quota.dailyCostRemaining !== 0.5
+    ) {
+      throw new Error('AI capabilities should expose daily cost quota status');
     }
     const logDb = new Database(costDbPath);
     try {
@@ -385,6 +392,15 @@ async function runAiCostLimitSmoke() {
       `).run(user.data.userId, 'sessionDraft', 'cost-limit-smoke', 'ok', 'openrouter', 'openrouter/free', 10, 0.5);
     } finally {
       logDb.close();
+    }
+    const usedCapabilities = await requestAt(AI_COST_GUARD_BASE, 'GET', '/api/ai/capabilities', null, user.data.token);
+    if (
+      usedCapabilities.data.quota.dailyRequestUsed !== 1 ||
+      usedCapabilities.data.quota.dailyRequestRemaining !== 19 ||
+      usedCapabilities.data.quota.dailyCostUsed !== 0.5 ||
+      usedCapabilities.data.quota.dailyCostRemaining !== 0
+    ) {
+      throw new Error('AI capabilities should expose consumed daily cost quota');
     }
     const blocked = await expectFailureAt(AI_COST_GUARD_BASE, 'POST', '/api/ai/session-draft', {
       prompt: '周五晚上海桌游',

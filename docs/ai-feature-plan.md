@@ -176,6 +176,7 @@ ai_usage_logs
 - 后端环境变量：`AI_ENABLED`、`AI_PROVIDER`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS`、`AI_RETRY_COUNT`、`AI_DAILY_COST_LIMIT`、`AI_DAILY_LIMIT`。
 - AI 用量日志表：`ai_usage_logs`。
 - 能力查询：`GET /api/ai/capabilities`。
+- 能力查询会返回当前用户今日 AI 请求用量、剩余次数、全站今日 cost 用量和剩余成本预算。
 - 发布草稿接口：`POST /api/ai/session-draft`。
 - 申请留言接口：`POST /api/ai/request-message`。
 - 匹配理由解释接口：`POST /api/ai/match-explanation`。
@@ -189,6 +190,7 @@ ai_usage_logs
 - 真实供应商预检：`npm run smoke:ai-provider` 可用后端 `.env` 中的 `AI_API_KEY` 做最小结构化联调，输出请求模型、实际路由模型和用量元数据，不打印密钥或生成正文。
 - OpenCode Zen provider：`AI_PROVIDER=opencode` 时走 OpenCode Zen OpenAI-compatible Chat Completions 接口，默认模型 `nemotron-3-super-free`，`AI_BASE_URL` 可填 `https://opencode.ai/zen/v1`。
 - 临时空响应重试：供应商 HTTP 200 但缺少 `message.content` 时按临时上游异常重试；content 存在但不是合法结构化 JSON 时仍直接失败，避免重复消耗。
+- 成本预算可观测：`GET /api/ai/capabilities` 的 `quota` 字段暴露当天请求和 cost 预算消耗，便于按真实调用校准阈值。
 - AI 输出归一化：发布草稿、留言、匹配解释、举报归类和运营摘要返回前都会走结构化校验。
 - smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要、未实现 provider guard、OpenRouter fake provider、临时失败重试、成本预算拦截、用量记录和结构化异常。
 

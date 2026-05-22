@@ -518,6 +518,7 @@ curl http://127.0.0.1:3000/api/health
 - P13.12 增加 `npm run smoke:ai-provider` 真实供应商预检，复用 provider 结构化调用路径，输出实际路由模型，并避免打印 key 或生成正文。（已完成）
 - P13.13 增加 OpenCode Zen provider，支持 `AI_PROVIDER=opencode`、`AI_BASE_URL=https://opencode.ai/zen/v1` 和 `nemotron-3-super-free` 免费结构化输出。（已完成）
 - P13.14 将供应商 HTTP 200 但空 `message.content` 的响应视为可重试临时异常，并保留非法 JSON 不重试的保护。（已完成）
+- P13.15 在 `GET /api/ai/capabilities` 中暴露今日请求和 cost 预算用量，支撑真实调用后的阈值校准。（已完成）
 
 验收：
 
