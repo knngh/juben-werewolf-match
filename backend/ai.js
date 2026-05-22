@@ -450,6 +450,7 @@ function normalizeOpenRouterMeta(payload = {}) {
   const usage = payload && payload.usage ? payload.usage : {};
   return {
     providerRequestId: normalizeText(payload && payload.id, 120),
+    providerModel: normalizeText(payload && payload.model, 120),
     promptTokens: normalizeUsageInteger(usage.prompt_tokens),
     completionTokens: normalizeUsageInteger(usage.completion_tokens),
     totalTokens: normalizeUsageInteger(usage.total_tokens),
