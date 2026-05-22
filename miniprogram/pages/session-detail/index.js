@@ -51,12 +51,15 @@ Page({
     loading: true,
     requesting: false,
     aiGeneratingMessage: false,
+    aiGeneratingExplanation: false,
+    aiExplanation: '',
     session: null,
     isCreator: false,
     hasContact: false,
     hasToken: false,
     aiCapabilities: {
       requestMessage: false,
+      matchExplanation: false,
     },
     requests: [],
     approvedRequests: [],
@@ -101,6 +104,7 @@ Page({
       if (res.code === 0 && res.data && res.data.features) {
         this.setData({
           'aiCapabilities.requestMessage': !!res.data.features.requestMessage,
+          'aiCapabilities.matchExplanation': !!res.data.features.matchExplanation,
         });
       }
     });
@@ -123,6 +127,7 @@ Page({
         session,
         isCreator,
         hasContact: !!(session.contactNote || (session.creator && session.creator.wechat)),
+        aiExplanation: '',
       });
       if (isCreator) {
         this.loadRequests();
@@ -181,6 +186,22 @@ Page({
       if (res.code === 0 && res.data && res.data.message) {
         this.setData({ message: res.data.message });
         wx.showToast({ title: '已生成留言', icon: 'success' });
+      } else {
+        wx.showToast({ title: res.message || 'AI 暂不可用', icon: 'none' });
+      }
+    });
+  },
+
+  generateAiMatchExplanation() {
+    if (!this.ensureLogin()) return;
+    if (this.data.aiGeneratingExplanation) return;
+    this.setData({ aiGeneratingExplanation: true });
+    api.post('/api/ai/match-explanation', {
+      sessionId: this.data.id,
+    }).then((res) => {
+      this.setData({ aiGeneratingExplanation: false });
+      if (res.code === 0 && res.data && res.data.explanation) {
+        this.setData({ aiExplanation: res.data.explanation });
       } else {
         wx.showToast({ title: res.message || 'AI 暂不可用', icon: 'none' });
       }

@@ -115,6 +115,7 @@ AI_DAILY_LIMIT=200
 POST /api/ai/session-draft
 POST /api/ai/request-message
 POST /api/ai/match-explanation
+POST /api/ai/report-classification
 GET  /api/ai/ops-summary
 ```
 
@@ -152,7 +153,8 @@ ai_usage_logs
 3. 小程序发布页增加“帮我填”按钮。（已完成）
 4. 做 `POST /api/ai/request-message`。（后端 mock 已完成）
 5. 小程序局详情申请区增加“帮我写留言”按钮。（已完成）
-6. 再做匹配解释、举报归类和运营摘要。
+6. 做匹配解释，先把规则理由转成可降级短说明。（mock 已完成）
+7. 做举报归类和运营摘要，先用 mock 输出复核建议。（mock 已完成）
 
 ## 风险
 
@@ -171,13 +173,17 @@ ai_usage_logs
 - 能力查询：`GET /api/ai/capabilities`。
 - 发布草稿接口：`POST /api/ai/session-draft`。
 - 申请留言接口：`POST /api/ai/request-message`。
+- 匹配理由解释接口：`POST /api/ai/match-explanation`。
+- 举报归类接口：`POST /api/ai/report-classification`。
+- 运营摘要接口：`GET /api/ai/ops-summary`。
 - 本地 mock provider：`AI_PROVIDER=mock`。
-- smoke 覆盖 mock 发布草稿和申请留言。
+- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类和运营摘要。
 
 小程序 UI 已接入：
 
 - 发布页增加“AI 帮我填”。
 - 申请区增加“AI 帮我写留言”。
+- 局详情增加“AI 解读匹配理由”。
 - 根据 `GET /api/ai/capabilities` 决定是否显示按钮。
 
 下一步是真实模型供应商接入：

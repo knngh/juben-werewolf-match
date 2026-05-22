@@ -66,6 +66,8 @@ assert(sessionDetailSource.includes('parseSessionId'), '局详情页应支持 sc
 assert(sessionDetailSource.includes('wx.setClipboardData'), '局详情页应支持复制微信号');
 assert(sessionDetailSource.includes('wx.showShareMenu'), '局详情页应显式启用分享菜单');
 assert(sessionDetailSource.includes('/api/ai/request-message'), '局详情页应接入 AI 申请留言接口');
+assert(sessionDetailSource.includes('/api/ai/match-explanation'), '局详情页应接入 AI 匹配理由解释接口');
+assert(sessionDetailSource.includes('matchExplanation'), '局详情页应按后端能力显示 AI 匹配解释');
 
 const sessionsSource = fs.readFileSync(path.join(root, 'pages/sessions/index.js'), 'utf8');
 assert(sessionsSource.includes('onShareAppMessage'), '找局页应支持分享');

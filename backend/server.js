@@ -183,6 +183,7 @@ function toBooleanFlag(value, fallback = true) {
 function getAiCapabilities() {
   const providerReady = AI_PROVIDER === 'mock' || !!AI_API_KEY;
   const ready = AI_ENABLED && !!AI_PROVIDER && providerReady;
+  const mockFeatureReady = ready && AI_PROVIDER === 'mock';
   return {
     enabled: AI_ENABLED,
     ready,
@@ -191,10 +192,11 @@ function getAiCapabilities() {
     timeoutMs: AI_TIMEOUT_MS,
     dailyLimit: AI_DAILY_LIMIT,
     features: {
-      sessionDraft: ready,
-      requestMessage: ready,
-      matchExplanation: false,
-      opsSummary: false,
+      sessionDraft: mockFeatureReady,
+      requestMessage: mockFeatureReady,
+      matchExplanation: mockFeatureReady,
+      reportClassification: mockFeatureReady,
+      opsSummary: mockFeatureReady,
     },
   };
 }
@@ -297,6 +299,151 @@ function buildMockRequestMessage(profile = {}, session = {}) {
   ].filter(Boolean);
   const intro = pieces.length ? pieces.join('，') : '我对这个局比较感兴趣';
   return normalizeText(`${intro}。看到“${session.title || '这个局'}”时间和类型都合适，希望能加入，会准时沟通不鸽。`, 200);
+}
+
+function buildMockMatchExplanation(profile = {}, session = {}, reasons = []) {
+  const normalizedReasons = normalizeTags(reasons).slice(0, 4);
+  if (!normalizedReasons.length) {
+    return '这局暂时没有明显匹配信号，可以重点确认时间、地点和人数是否适合你。';
+  }
+
+  const details = [];
+  if (normalizedReasons.includes('常玩类型')) {
+    details.push(`${session.game_type || '这个类型'}属于你的常玩类型`);
+  }
+  if (normalizedReasons.includes('同城')) {
+    details.push(`${session.city || '同城'}地点更方便线下沟通`);
+  }
+  if (normalizedReasons.includes('预算匹配')) {
+    details.push(`预算${session.budget_range || ''}和你的偏好接近`);
+  }
+  if (normalizedReasons.includes('玩法偏好')) {
+    details.push(`${session.play_mode || '玩法'}符合你的玩法偏好`);
+  }
+  if (normalizedReasons.includes('人数合适')) {
+    details.push(`人数规模接近你偏好的${profile.playerCountRange || '范围'}`);
+  }
+  if (normalizedReasons.includes('距离近') || normalizedReasons.includes('同城附近')) {
+    details.push('地点距离较近');
+  }
+  if (normalizedReasons.includes('时间临近')) {
+    details.push('开局时间比较近');
+  }
+
+  const summary = `匹配理由：${normalizedReasons.join('、')}。`;
+  const detailText = details.length ? details.join('，') + '。' : '';
+  return normalizeText(`${summary}${detailText}建议再确认具体时间和局主说明是否合适。`, 220);
+}
+
+function buildMockReportClassification(input = {}) {
+  const reason = REPORT_REASONS.includes(input.reason) ? input.reason : '';
+  const detail = normalizeText(input.detail, 300);
+  const text = `${reason} ${detail}`;
+  const rules = [
+    { reason: '骚扰', pattern: /骚扰|辱骂|威胁|私信|纠缠|不舒服|性骚扰/ },
+    { reason: '鸽局', pattern: /鸽|不来|失联|迟到|放鸽子|临时取消|爽约/ },
+    { reason: '虚假信息', pattern: /虚假|骗人|诈骗|假|冒充|信息不实|转账/ },
+    { reason: '不合适内容', pattern: /黄赌毒|色情|暴力|歧视|广告|引流|不合适/ },
+  ];
+  const matched = rules.find((item) => item.pattern.test(text));
+  const category = matched ? matched.reason : reason || '其他';
+  const highRisk = /威胁|诈骗|转账|人身安全|性骚扰|黄赌毒|暴力/.test(text);
+  const mediumRisk = highRisk || category !== '其他' || detail.length >= 20;
+  const severity = highRisk ? 'high' : mediumRisk ? 'medium' : 'low';
+  const confidence = matched || reason ? 0.82 : 0.58;
+  const summary = detail
+    ? normalizeText(`用户描述与“${category}”较相关：${detail}`, 120)
+    : `用户选择了“${category}”，建议结合上下文复核。`;
+  const suggestedAction = severity === 'high'
+    ? '优先人工复核，必要时先限制可疑互动。'
+    : severity === 'medium'
+      ? '进入人工复核队列，结合局记录和聊天凭证判断。'
+      : '暂按低风险记录，等待更多证据或重复举报。';
+
+  return { reason: category, severity, confidence, summary, suggestedAction };
+}
+
+function getOpsStats(userId) {
+  const users = db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
+  const openSessions = db.prepare("SELECT COUNT(*) AS count FROM game_sessions WHERE status = 'open'").get().count;
+  const pendingRequests = db.prepare("SELECT COUNT(*) AS count FROM session_requests WHERE status = 'pending'").get().count;
+  const reports = db.prepare("SELECT COUNT(*) AS count FROM reports WHERE status = 'open'").get().count;
+  const unreadNotifications = db.prepare(`
+    SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL
+  `).get(userId).count;
+  return {
+    users,
+    openSessions,
+    pendingRequests,
+    openReports: reports,
+    myUnreadNotifications: unreadNotifications,
+  };
+}
+
+function getOpsSignalSnapshot(userId) {
+  const stats = getOpsStats(userId);
+  const reportBreakdown = db.prepare(`
+    SELECT reason, COUNT(*) AS count
+    FROM reports
+    WHERE status = 'open'
+    GROUP BY reason
+    ORDER BY count DESC, reason ASC
+    LIMIT 5
+  `).all();
+  const requestBreakdown = db.prepare(`
+    SELECT status, COUNT(*) AS count
+    FROM session_requests
+    GROUP BY status
+    ORDER BY count DESC, status ASC
+  `).all();
+  const feedback = db.prepare(`
+    SELECT
+      COUNT(*) AS total,
+      SUM(punctual) AS punctual,
+      SUM(friendly) AS friendly,
+      SUM(would_play_again) AS would_play_again
+    FROM session_feedback
+  `).get();
+  return {
+    stats,
+    reportBreakdown,
+    requestBreakdown,
+    feedback: {
+      total: feedback.total || 0,
+      punctual: feedback.punctual || 0,
+      friendly: feedback.friendly || 0,
+      wouldPlayAgain: feedback.would_play_again || 0,
+    },
+  };
+}
+
+function buildMockOpsSummary(snapshot = {}) {
+  const stats = snapshot.stats || {};
+  const topReport = (snapshot.reportBreakdown || [])[0];
+  const feedback = snapshot.feedback || {};
+  const highlights = [
+    `当前开放局 ${stats.openSessions || 0} 个，待处理申请 ${stats.pendingRequests || 0} 个。`,
+    `开放举报 ${stats.openReports || 0} 条${topReport ? `，最高频原因是${topReport.reason}` : ''}。`,
+    `局后反馈 ${feedback.total || 0} 条，愿意再约 ${feedback.wouldPlayAgain || 0} 条。`,
+  ];
+  const actions = [];
+  if ((stats.openReports || 0) > 0) {
+    actions.push(topReport ? `优先复核${topReport.reason}类举报。` : '优先复核开放举报。');
+  }
+  if ((stats.pendingRequests || 0) > 0) {
+    actions.push('提醒局主及时处理待确认申请。');
+  }
+  if ((stats.openSessions || 0) === 0) {
+    actions.push('补充示例局或引导活跃用户发起新局。');
+  }
+  if (!actions.length) {
+    actions.push('维持现有监控，关注新增举报和申请积压。');
+  }
+  return {
+    summary: normalizeText(highlights.join(''), 240),
+    highlights,
+    actions,
+  };
 }
 
 async function getWechatSession(code) {
@@ -1062,6 +1209,106 @@ app.post(
     }
   }
 );
+
+app.post(
+  '/api/ai/match-explanation',
+  requireAuth,
+  [
+    body('sessionId').isInt({ min: 1 }).withMessage('请选择要解释的局'),
+  ],
+  (req, res) => {
+    if (!requireValidation(req, res)) return;
+    if (!requireAiReady(res, 'matchExplanation')) return;
+    if (!requireAiQuota(res, req.userId)) return;
+    const sessionId = Number(req.body.sessionId);
+    const startedAt = Date.now();
+    const input = { sessionId };
+    try {
+      const session = getSessionRow(sessionId);
+      if (!session) {
+        logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'not_found', startedAt });
+        return res.status(404).json({ code: 404, message: '游戏局不存在' });
+      }
+      if (AI_PROVIDER !== 'mock') {
+        logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'provider_not_implemented', startedAt });
+        return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
+      }
+      const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
+      const match = scoreSessionMatch(session, profile);
+      const explanation = buildMockMatchExplanation(profile, session, match.reasons);
+      logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'ok', startedAt });
+      res.json({ code: 0, data: { explanation, reasons: match.reasons, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
+    } catch (error) {
+      logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'error', startedAt });
+      res.status(500).json({ code: 500, message: '生成匹配说明失败' });
+    }
+  }
+);
+
+app.post(
+  '/api/ai/report-classification',
+  requireAuth,
+  [
+    body('reason').optional({ checkFalsy: true }).isIn(REPORT_REASONS).withMessage('请选择有效举报原因'),
+    body('detail').optional({ checkFalsy: true }).trim().isLength({ max: 300 }).withMessage('举报说明最多 300 字'),
+  ],
+  (req, res) => {
+    if (!requireValidation(req, res)) return;
+    if (!requireAiReady(res, 'reportClassification')) return;
+    if (!requireAiQuota(res, req.userId)) return;
+    const input = {
+      reason: REPORT_REASONS.includes(req.body.reason) ? req.body.reason : '',
+      detail: normalizeText(req.body.detail, 300),
+    };
+    if (!input.reason && !input.detail) {
+      return res.status(400).json({ code: 400, message: '请提供举报原因或说明' });
+    }
+    const startedAt = Date.now();
+    try {
+      if (AI_PROVIDER !== 'mock') {
+        logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'provider_not_implemented', startedAt });
+        return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
+      }
+      const classification = buildMockReportClassification(input);
+      logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'ok', startedAt });
+      res.json({ code: 0, data: { classification, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
+    } catch (error) {
+      logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'error', startedAt });
+      res.status(500).json({ code: 500, message: '生成举报归类失败' });
+    }
+  }
+);
+
+app.get('/api/ai/ops-summary', requireAuth, (req, res) => {
+  if (!requireAiReady(res, 'opsSummary')) return;
+  if (!requireAiQuota(res, req.userId)) return;
+  const startedAt = Date.now();
+  const input = { scope: 'ops-summary' };
+  try {
+    if (AI_PROVIDER !== 'mock') {
+      logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'provider_not_implemented', startedAt });
+      return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
+    }
+    const snapshot = getOpsSignalSnapshot(req.userId);
+    const summary = buildMockOpsSummary(snapshot);
+    logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'ok', startedAt });
+    res.json({
+      code: 0,
+      data: {
+        ...summary,
+        stats: snapshot.stats,
+        reportBreakdown: snapshot.reportBreakdown,
+        requestBreakdown: snapshot.requestBreakdown,
+        feedback: snapshot.feedback,
+        provider: AI_PROVIDER,
+        model: AI_MODEL || 'mock',
+      },
+    });
+  } catch (error) {
+    logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'error', startedAt });
+    res.status(500).json({ code: 500, message: '生成运营摘要失败' });
+  }
+});
 
 // 发现页：推荐用户（排除自己、已点赞、已匹配），按偏好相似度简单排序
 app.get('/api/discover', requireAuth, (req, res) => {
@@ -2038,22 +2285,9 @@ app.patch('/api/notifications/read-all', requireAuth, (req, res) => {
 
 // 轻量运营统计：只读，不提供商家后台
 app.get('/api/ops/stats', requireAuth, (req, res) => {
-  const users = db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
-  const openSessions = db.prepare("SELECT COUNT(*) AS count FROM game_sessions WHERE status = 'open'").get().count;
-  const pendingRequests = db.prepare("SELECT COUNT(*) AS count FROM session_requests WHERE status = 'pending'").get().count;
-  const reports = db.prepare("SELECT COUNT(*) AS count FROM reports WHERE status = 'open'").get().count;
-  const unreadNotifications = db.prepare(`
-    SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL
-  `).get(req.userId).count;
   res.json({
     code: 0,
-    data: {
-      users,
-      openSessions,
-      pendingRequests,
-      openReports: reports,
-      myUnreadNotifications: unreadNotifications,
-    },
+    data: getOpsStats(req.userId),
   });
 });
 

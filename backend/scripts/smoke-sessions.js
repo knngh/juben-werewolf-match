@@ -199,7 +199,13 @@ async function main() {
     }
 
     const aiCapabilities = await request('GET', '/api/ai/capabilities', null, creatorToken);
-    if (!aiCapabilities.data.ready || !aiCapabilities.data.features.sessionDraft) {
+    if (
+      !aiCapabilities.data.ready ||
+      !aiCapabilities.data.features.sessionDraft ||
+      !aiCapabilities.data.features.matchExplanation ||
+      !aiCapabilities.data.features.reportClassification ||
+      !aiCapabilities.data.features.opsSummary
+    ) {
       throw new Error('AI mock capabilities should be available in smoke');
     }
     const aiDraft = await request('POST', '/api/ai/session-draft', {
@@ -406,11 +412,32 @@ async function main() {
     if (detail.data.address !== '人民大道120号附近' || !detail.data.location) {
       throw new Error('Session location fields were not returned');
     }
+    const aiExplanation = await request('POST', '/api/ai/match-explanation', {
+      sessionId,
+    }, joinerToken);
+    if (
+      !aiExplanation.data.explanation ||
+      !aiExplanation.data.explanation.includes('常玩类型') ||
+      !aiExplanation.data.explanation.includes('预算')
+    ) {
+      throw new Error('AI match explanation should summarize rule-based reasons');
+    }
     const aiMessage = await request('POST', '/api/ai/request-message', {
       sessionId,
     }, joinerToken);
     if (!aiMessage.data.message || !aiMessage.data.message.includes('周五晚合作桌游局')) {
       throw new Error('AI request message should reference target session');
+    }
+    const reportClassification = await request('POST', '/api/ai/report-classification', {
+      reason: '其他',
+      detail: '对方临时爽约放鸽子，之后一直失联。',
+    }, joinerToken);
+    if (
+      !reportClassification.data.classification ||
+      reportClassification.data.classification.reason !== '鸽局' ||
+      reportClassification.data.classification.severity !== 'medium'
+    ) {
+      throw new Error('AI report classification should map free text to a report category');
     }
 
     const tempRequest = await request('POST', `/api/sessions/${sessionId}/requests`, {
@@ -482,6 +509,16 @@ async function main() {
     const ops = await request('GET', '/api/ops/stats', null, creatorToken);
     if (ops.data.openSessions < 1 || ops.data.pendingRequests < 0 || ops.data.openReports < 1) {
       throw new Error('Ops stats should include core counts');
+    }
+    const aiOpsSummary = await request('GET', '/api/ai/ops-summary', null, creatorToken);
+    if (
+      !aiOpsSummary.data.summary ||
+      !aiOpsSummary.data.summary.includes('开放举报') ||
+      aiOpsSummary.data.stats.openReports < 1 ||
+      !Array.isArray(aiOpsSummary.data.requestBreakdown) ||
+      !aiOpsSummary.data.actions.length
+    ) {
+      throw new Error('AI ops summary should include report and action signals');
     }
     await request('POST', `/api/block/${blockedUser.userId}`, {}, joinerToken);
     await expectFailure('POST', `/api/like/${joiner.userId}`, {}, blockedToken);

@@ -15,6 +15,8 @@
       <view wx:if="{{session.matchReasons && session.matchReasons.length}}" class="tag-row reason-row">
         <text wx:for="{{session.matchReasons}}" wx:for-item="reason" wx:key="*this" class="reason">{{reason}}</text>
       </view>
+      <button wx:if="{{!isCreator && aiCapabilities.matchExplanation && session.matchReasons && session.matchReasons.length}}" class="btn btn-secondary btn-small ai-explain-btn" loading="{{aiGeneratingExplanation}}" bindtap="generateAiMatchExplanation">AI 解读匹配理由</button>
+      <text wx:if="{{aiExplanation}}" class="ai-explanation">{{aiExplanation}}</text>
 
       <view wx:if="{{session.tags && session.tags.length}}" class="tag-row tag-block">
         <text wx:for="{{session.tags}}" wx:for-item="tag" wx:key="*this" class="tag">{{tag}}</text>
