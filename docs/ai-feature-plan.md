@@ -178,8 +178,9 @@ ai_usage_logs
 - 运营摘要接口：`GET /api/ai/ops-summary`。
 - 本地 mock provider：`AI_PROVIDER=mock`。
 - provider 能力表：未实现供应商不会向前端暴露 ready 功能。
+- provider 模块：AI 能力、mock 输出和结构化归一化集中在 `backend/ai.js`。
 - AI 输出归一化：发布草稿、留言、匹配解释、举报归类和运营摘要返回前都会走结构化校验。
-- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要和未实现 provider guard。
+- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要、未实现 provider guard 和输出归一化。
 
 小程序 UI 已接入：
 

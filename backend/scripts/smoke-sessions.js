@@ -3,6 +3,7 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const ai = require('../ai');
 
 const PORT = 3127;
 const GEO_PORT = 3128;
@@ -142,6 +143,61 @@ function addDays(days) {
   return date.toISOString().slice(0, 10);
 }
 
+function runAiModuleSmoke() {
+  const options = {
+    gameTypes: ['剧本杀', '狼人杀', '桌游'],
+    playStyles: ['推理型', '欢乐型'],
+    budgetRanges: ['50以下', '50-100', '看局而定'],
+    playModes: ['线下', '线上'],
+    excludedGameTypes: ['麻将', '德州扑克'],
+    reportReasons: ['骚扰', '鸽局', '虚假信息', '不合适内容', '其他'],
+  };
+  const capabilities = ai.getAiCapabilities({
+    enabled: true,
+    provider: 'openai',
+    apiKey: 'fake-smoke-key',
+    model: 'fake-model',
+    timeoutMs: 8000,
+    dailyLimit: 20,
+  });
+  if (capabilities.ready || capabilities.features.sessionDraft) {
+    throw new Error('AI module should not enable unsupported providers');
+  }
+  const draft = ai.normalizeAiSessionDraft({
+    gameType: '麻将',
+    playMode: '未知',
+    budgetRange: '999',
+    minPlayers: -1,
+    maxPlayers: 99,
+    tags: ['麻将', '推理'],
+  }, {
+    gameTypes: ['桌游'],
+    budgetRange: '50-100',
+    city: '上海市',
+  }, options);
+  if (
+    draft.gameType !== '桌游' ||
+    draft.playMode !== '线下' ||
+    draft.budgetRange !== '50-100' ||
+    draft.city !== '上海' ||
+    draft.tags.includes('麻将')
+  ) {
+    throw new Error('AI module should normalize unsafe draft output');
+  }
+  const classification = ai.normalizeAiReportClassification({
+    reason: '未知',
+    severity: 'critical',
+    confidence: 2,
+  }, options);
+  if (
+    classification.reason !== '其他' ||
+    classification.severity !== 'low' ||
+    classification.confidence !== 1
+  ) {
+    throw new Error('AI module should normalize report classification output');
+  }
+}
+
 async function runAiProviderGuardSmoke() {
   const guardServer = startServer({
     port: AI_GUARD_PORT,
@@ -167,6 +223,7 @@ async function runAiProviderGuardSmoke() {
 }
 
 async function main() {
+  runAiModuleSmoke();
   const geoMock = startGeoMock();
   await listen(geoMock, GEO_PORT);
   await runAiProviderGuardSmoke();
