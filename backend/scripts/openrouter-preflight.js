@@ -2,7 +2,10 @@ require('../env')();
 
 const ai = require('../ai');
 
-const DEFAULT_MODEL = 'openrouter/free';
+const DEFAULT_MODELS = {
+  openrouter: 'openrouter/free',
+  opencode: 'nemotron-3-super-free',
+};
 
 function parseIntegerEnv(name, fallback, min, max) {
   const value = Number(process.env[name]);
@@ -27,15 +30,18 @@ function buildConfig() {
   const provider = process.env.AI_PROVIDER || '';
   const apiKey = process.env.AI_API_KEY || '';
 
-  requireConfig(process.env.AI_ENABLED === 'true', 'AI_ENABLED must be true for OpenRouter preflight');
-  requireConfig(provider === 'openrouter', 'AI_PROVIDER must be openrouter for OpenRouter preflight');
-  requireConfig(!!apiKey, 'AI_API_KEY is required for OpenRouter preflight');
+  requireConfig(process.env.AI_ENABLED === 'true', 'AI_ENABLED must be true for AI provider preflight');
+  requireConfig(
+    provider === 'openrouter' || provider === 'opencode',
+    'AI_PROVIDER must be openrouter or opencode for AI provider preflight'
+  );
+  requireConfig(!!apiKey, 'AI_API_KEY is required for AI provider preflight');
 
   return {
     enabled: true,
     provider,
     apiKey,
-    model: process.env.AI_MODEL || DEFAULT_MODEL,
+    model: process.env.AI_MODEL || DEFAULT_MODELS[provider],
     baseUrl: process.env.AI_BASE_URL || '',
     siteUrl: process.env.AI_SITE_URL || '',
     appTitle: process.env.AI_APP_TITLE || 'juben-werewolf-match',
@@ -49,7 +55,7 @@ function buildConfig() {
 async function main() {
   const config = buildConfig();
   const capabilities = ai.getAiCapabilities(config);
-  requireConfig(capabilities.ready, 'OpenRouter provider is not ready');
+  requireConfig(capabilities.ready, 'AI provider is not ready');
 
   const result = await ai.generateRequestMessage(
     config,
@@ -77,7 +83,7 @@ async function main() {
   console.log(JSON.stringify({
     ok: true,
     provider: capabilities.provider,
-    model: capabilities.model || DEFAULT_MODEL,
+    model: capabilities.model || DEFAULT_MODELS[capabilities.provider],
     selectedModel: meta.providerModel || null,
     outputLength: result.data.length,
     usage: {
@@ -92,6 +98,6 @@ async function main() {
 
 main().catch((error) => {
   const prefix = error.configurationError ? 'configuration' : 'request';
-  console.error(`OpenRouter preflight ${prefix} failed: ${error.message}`);
+  console.error(`AI provider preflight ${prefix} failed: ${error.message}`);
   process.exit(1);
 });

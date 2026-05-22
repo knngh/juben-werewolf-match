@@ -37,13 +37,15 @@
 cd backend
 npm run smoke:sessions
 npm run smoke:prod
-npm run smoke:openrouter
+npm run smoke:ai-provider
 
 cd ../frontend
 npm run build
 ```
 
-`npm run smoke:openrouter` 只在 `AI_ENABLED=true`、`AI_PROVIDER=openrouter` 且后端 `.env` 已配置 `AI_API_KEY` 时运行；发布前用于确认真实模型路由、实际路由模型、结构化输出、token/cost 元数据都可用。脚本不会打印密钥或生成正文。
+`npm run smoke:ai-provider` 只在 `AI_ENABLED=true`、`AI_PROVIDER=openrouter` 或 `AI_PROVIDER=opencode` 且后端 `.env` 已配置 `AI_API_KEY` 时运行；发布前用于确认真实模型路由、实际路由模型、结构化输出、token/cost 元数据都可用。脚本不会打印密钥或生成正文。
+
+如使用 OpenCode Zen，配置 `AI_PROVIDER=opencode`、`AI_MODEL=nemotron-3-super-free`、`AI_BASE_URL=https://opencode.ai/zen/v1` 后执行同一个预检脚本。
 
 手动检查：
 

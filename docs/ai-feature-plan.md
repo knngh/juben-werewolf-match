@@ -186,7 +186,8 @@ ai_usage_logs
 - provider 模块：AI 能力、mock 输出和结构化归一化集中在 `backend/ai.js`。
 - OpenRouter provider：`AI_PROVIDER=openrouter` 时走 OpenRouter Chat Completions 兼容接口，默认模型 `openrouter/free`。
 - OpenRouter 用量元数据：provider request id、tokens 和 cost credits 会写入 `ai_usage_logs`，并在运营摘要中提供聚合统计。
-- OpenRouter 真实供应商预检：`npm run smoke:openrouter` 可用后端 `.env` 中的 `AI_API_KEY` 做最小结构化联调，输出请求模型、实际路由模型和用量元数据，不打印密钥或生成正文。
+- 真实供应商预检：`npm run smoke:ai-provider` 可用后端 `.env` 中的 `AI_API_KEY` 做最小结构化联调，输出请求模型、实际路由模型和用量元数据，不打印密钥或生成正文。
+- OpenCode Zen provider：`AI_PROVIDER=opencode` 时走 OpenCode Zen OpenAI-compatible Chat Completions 接口，默认模型 `nemotron-3-super-free`，`AI_BASE_URL` 可填 `https://opencode.ai/zen/v1`。
 - AI 输出归一化：发布草稿、留言、匹配解释、举报归类和运营摘要返回前都会走结构化校验。
 - smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要、未实现 provider guard、OpenRouter fake provider、临时失败重试、成本预算拦截、用量记录和结构化异常。
 

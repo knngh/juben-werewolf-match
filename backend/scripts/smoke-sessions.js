@@ -69,13 +69,16 @@ function startOpenRouterMock() {
     req.on('end', () => {
       const payload = JSON.parse(body || '{}');
       calls.push({ headers: req.headers, payload });
+      const isOpenRouterRequest = payload.model === 'openrouter/free' &&
+        payload.provider &&
+        payload.provider.require_parameters === true;
+      const isOpenCodeRequest = payload.model === 'nemotron-3-super-free' &&
+        payload.provider === undefined;
       if (
-        req.headers.authorization !== 'Bearer fake-openrouter-key' ||
-        payload.model !== 'openrouter/free' ||
+        !['Bearer fake-openrouter-key', 'Bearer fake-opencode-key'].includes(req.headers.authorization) ||
+        (!isOpenRouterRequest && !isOpenCodeRequest) ||
         !payload.response_format ||
-        payload.response_format.type !== 'json_schema' ||
-        !payload.provider ||
-        payload.provider.require_parameters !== true
+        payload.response_format.type !== 'json_schema'
       ) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'bad openrouter request' } }));
@@ -466,6 +469,57 @@ async function runOpenRouterSmoke() {
   }
 }
 
+async function runOpenCodeSmoke() {
+  const openCodeMock = startOpenRouterMock();
+  const openCodeDbPath = path.join(tmpDir, 'opencode-provider.db');
+  await listen(openCodeMock, OPENROUTER_PORT);
+  const server = startServer({
+    port: OPENROUTER_BACKEND_PORT,
+    dbPath: openCodeDbPath,
+    aiProvider: 'opencode',
+    aiApiKey: 'fake-opencode-key',
+    aiModel: '',
+    aiBaseUrl: `http://127.0.0.1:${OPENROUTER_PORT}/api/v1`,
+    aiAppTitle: 'juben smoke',
+  });
+  try {
+    await waitForServer(OPENROUTER_BASE);
+    const user = await requestAt(OPENROUTER_BASE, 'POST', '/api/register', {
+      nickname: 'OpenCode 测试',
+      wechat: 'opencode_smoke',
+      password: '123456',
+    });
+    const capabilities = await requestAt(OPENROUTER_BASE, 'GET', '/api/ai/capabilities', null, user.data.token);
+    if (
+      capabilities.data.ready !== true ||
+      capabilities.data.provider !== 'opencode' ||
+      capabilities.data.model !== 'nemotron-3-super-free' ||
+      !capabilities.data.features.sessionDraft
+    ) {
+      throw new Error('OpenCode provider should expose AI capabilities');
+    }
+    const draft = await requestAt(OPENROUTER_BASE, 'POST', '/api/ai/session-draft', {
+      prompt: '周五晚上海新手友好桌游',
+    }, user.data.token);
+    if (
+      draft.data.provider !== 'opencode' ||
+      draft.data.model !== 'nemotron-3-super-free' ||
+      draft.data.draft.gameType !== '桌游' ||
+      openCodeMock.calls.length !== 2
+    ) {
+      throw new Error('OpenCode session draft should retry once and use the provider response');
+    }
+    const headers = openCodeMock.calls[1].headers;
+    const payload = openCodeMock.calls[1].payload;
+    if (headers['http-referer'] || headers['x-openrouter-title'] || payload.provider !== undefined) {
+      throw new Error('OpenCode requests should not include OpenRouter-specific routing fields');
+    }
+  } finally {
+    server.kill();
+    openCodeMock.close();
+  }
+}
+
 async function main() {
   await runAiModuleSmoke();
   const geoMock = startGeoMock();
@@ -473,6 +527,7 @@ async function main() {
   await runAiProviderGuardSmoke();
   await runAiCostLimitSmoke();
   await runOpenRouterSmoke();
+  await runOpenCodeSmoke();
   const server = startServer();
   try {
     await waitForServer();

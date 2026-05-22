@@ -14,10 +14,19 @@ const AI_PROVIDER_FEATURES = {
     reportClassification: true,
     opsSummary: true,
   },
+  opencode: {
+    sessionDraft: true,
+    requestMessage: true,
+    matchExplanation: true,
+    reportClassification: true,
+    opsSummary: true,
+  },
 };
 const AI_SEVERITY_LEVELS = ['low', 'medium', 'high'];
 const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
+const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/v1/chat/completions';
+const DEFAULT_OPENCODE_MODEL = 'nemotron-3-super-free';
 
 function normalizeTags(tags) {
   if (!Array.isArray(tags)) return [];
@@ -96,7 +105,18 @@ function getAiCapabilities(config) {
 function normalizeProviderModel(provider, model) {
   if (model) return model;
   if (provider === 'openrouter') return DEFAULT_OPENROUTER_MODEL;
+  if (provider === 'opencode') return DEFAULT_OPENCODE_MODEL;
   return '';
+}
+
+function normalizeChatCompletionsUrl(provider, baseUrl) {
+  const configuredUrl = String(baseUrl || '').trim();
+  const defaultUrl = provider === 'opencode' ? DEFAULT_OPENCODE_BASE_URL : DEFAULT_OPENROUTER_BASE_URL;
+  const url = configuredUrl || defaultUrl;
+  const normalizedUrl = url.replace(/\/+$/, '');
+  return normalizedUrl.endsWith('/chat/completions')
+    ? normalizedUrl
+    : `${normalizedUrl}/chat/completions`;
 }
 
 function pickFirstMention(text, values, fallback = '') {
@@ -431,7 +451,7 @@ function pickOpenRouterContent(payload) {
 function parseOpenRouterJson(payload) {
   const content = pickOpenRouterContent(payload);
   if (!content) {
-    const error = new Error('OpenRouter response missing content');
+    const error = new Error('AI provider response missing content');
     error.status = 502;
     error.retryable = false;
     throw error;
@@ -439,7 +459,7 @@ function parseOpenRouterJson(payload) {
   try {
     return JSON.parse(content);
   } catch {
-    const error = new Error('OpenRouter response was not valid JSON');
+    const error = new Error('AI provider response was not valid JSON');
     error.status = 502;
     error.retryable = false;
     throw error;
@@ -484,41 +504,46 @@ async function sleep(ms) {
 }
 
 async function callOpenRouterJson(config = {}, messages, responseFormat) {
-  if (config.provider !== 'openrouter') {
+  if (config.provider !== 'openrouter' && config.provider !== 'opencode') {
     throw createAiProviderError('AI provider is not supported', 501);
   }
   if (!config.apiKey) {
-    throw createAiProviderError('OpenRouter API key is not configured', 503);
+    throw createAiProviderError('AI provider API key is not configured', 503);
   }
   const headers = {
     Authorization: `Bearer ${config.apiKey}`,
     'Content-Type': 'application/json',
   };
-  if (config.siteUrl) headers['HTTP-Referer'] = config.siteUrl;
-  if (config.appTitle) headers['X-OpenRouter-Title'] = config.appTitle;
+  if (config.provider === 'openrouter') {
+    if (config.siteUrl) headers['HTTP-Referer'] = config.siteUrl;
+    if (config.appTitle) headers['X-OpenRouter-Title'] = config.appTitle;
+  }
 
   const maxAttempts = 1 + normalizeInteger(config.retryCount, 0, 3, 1);
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.timeoutMs || 8000);
     try {
-      const response = await fetch(config.baseUrl || DEFAULT_OPENROUTER_BASE_URL, {
+      const body = {
+        model: normalizeProviderModel(config.provider, config.model),
+        messages,
+        response_format: responseFormat,
+      };
+      if (config.provider === 'openrouter') {
+        body.provider = {
+          require_parameters: true,
+        };
+      }
+      const response = await fetch(normalizeChatCompletionsUrl(config.provider, config.baseUrl), {
         method: 'POST',
         headers,
         signal: controller.signal,
-        body: JSON.stringify({
-          model: normalizeProviderModel('openrouter', config.model),
-          messages,
-          response_format: responseFormat,
-          provider: {
-            require_parameters: true,
-          },
-        }),
+        body: JSON.stringify(body),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw createAiProviderError(
-          payload.error && payload.error.message ? payload.error.message : 'OpenRouter request failed',
+          payload.error && payload.error.message ? payload.error.message : 'AI provider request failed',
           response.status === 429 ? 429 : 502,
           normalizeOpenRouterMeta(payload)
         );
@@ -532,7 +557,7 @@ async function callOpenRouterJson(config = {}, messages, responseFormat) {
       }
     } catch (error) {
       const normalizedError = error.name === 'AbortError'
-        ? createAiProviderError('OpenRouter request timed out', 504)
+        ? createAiProviderError('AI provider request timed out', 504)
         : error;
       if (attempt < maxAttempts - 1 && shouldRetryOpenRouterError(normalizedError)) {
         await sleep(100 * (attempt + 1));
@@ -543,7 +568,7 @@ async function callOpenRouterJson(config = {}, messages, responseFormat) {
       clearTimeout(timeout);
     }
   }
-  throw createAiProviderError('OpenRouter request failed', 502);
+  throw createAiProviderError('AI provider request failed', 502);
 }
 
 function buildSystemPrompt() {

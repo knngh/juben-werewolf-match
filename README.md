@@ -63,14 +63,26 @@ AI_RETRY_COUNT=1
 AI_DAILY_COST_LIMIT=0
 ```
 
-真实模型接入时，模型 Key 只能放在后端 `.env` 的 `AI_API_KEY`。配置完成后，可在后端目录执行 `npm run smoke:openrouter` 做一次真实供应商预检；脚本只输出请求模型、实际路由模型、响应长度和 token/cost 元数据，不打印 key 或生成正文。
+OpenCode Zen 免费模型联调可设置：
+
+```bash
+AI_ENABLED=true
+AI_PROVIDER=opencode
+AI_MODEL=nemotron-3-super-free
+AI_BASE_URL=https://opencode.ai/zen/v1
+AI_API_KEY=your-opencode-zen-key
+AI_RETRY_COUNT=1
+AI_DAILY_COST_LIMIT=0
+```
+
+真实模型接入时，模型 Key 只能放在后端 `.env` 的 `AI_API_KEY`。配置完成后，可在后端目录执行 `npm run smoke:ai-provider` 做一次真实供应商预检；脚本只输出请求模型、实际路由模型、响应长度和 token/cost 元数据，不打印 key 或生成正文。
 
 常用检查：
 
 ```bash
 curl http://localhost:3000/api/health
 npm run smoke:sessions
-npm run smoke:openrouter
+npm run smoke:ai-provider
 npm run seed:demo
 npm run backup:db
 npm run cleanup:expired

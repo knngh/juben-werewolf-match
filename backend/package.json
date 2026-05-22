@@ -11,6 +11,7 @@
     "backup:db": "node scripts/backup-db.js",
     "cleanup:expired": "node scripts/cleanup-expired-sessions.js",
     "smoke:prod": "node scripts/prod-smoke.js",
+    "smoke:ai-provider": "node scripts/openrouter-preflight.js",
     "smoke:openrouter": "node scripts/openrouter-preflight.js"
   },
   "dependencies": {
