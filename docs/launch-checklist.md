@@ -18,6 +18,7 @@
 - `AI_SITE_URL`
 - `AI_APP_TITLE`
 - `AI_TIMEOUT_MS`
+- `AI_RETRY_COUNT`
 - `AI_DAILY_LIMIT`
 
 ## 部署步骤

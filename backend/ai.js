@@ -432,6 +432,7 @@ function parseOpenRouterJson(payload) {
   if (!content) {
     const error = new Error('OpenRouter response missing content');
     error.status = 502;
+    error.retryable = false;
     throw error;
   }
   try {
@@ -439,6 +440,7 @@ function parseOpenRouterJson(payload) {
   } catch {
     const error = new Error('OpenRouter response was not valid JSON');
     error.status = 502;
+    error.retryable = false;
     throw error;
   }
 }
@@ -465,6 +467,20 @@ function createAiProviderError(message, status, meta = {}) {
   return error;
 }
 
+function shouldRetryOpenRouterError(error) {
+  if (!error) return false;
+  if (error.retryable === false) return false;
+  if (error.retryable === true) return true;
+  if (error.name === 'AbortError') return true;
+  if (!Number.isInteger(error.status)) return true;
+  return error.status === 429 || error.status >= 500;
+}
+
+async function sleep(ms) {
+  if (ms <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function callOpenRouterJson(config = {}, messages, responseFormat) {
   if (config.provider !== 'openrouter') {
     throw createAiProviderError('AI provider is not supported', 501);
@@ -472,8 +488,6 @@ async function callOpenRouterJson(config = {}, messages, responseFormat) {
   if (!config.apiKey) {
     throw createAiProviderError('OpenRouter API key is not configured', 503);
   }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs || 8000);
   const headers = {
     Authorization: `Bearer ${config.apiKey}`,
     'Content-Type': 'application/json',
@@ -481,43 +495,53 @@ async function callOpenRouterJson(config = {}, messages, responseFormat) {
   if (config.siteUrl) headers['HTTP-Referer'] = config.siteUrl;
   if (config.appTitle) headers['X-OpenRouter-Title'] = config.appTitle;
 
-  try {
-    const response = await fetch(config.baseUrl || DEFAULT_OPENROUTER_BASE_URL, {
-      method: 'POST',
-      headers,
-      signal: controller.signal,
-      body: JSON.stringify({
-        model: normalizeProviderModel('openrouter', config.model),
-        messages,
-        response_format: responseFormat,
-        provider: {
-          require_parameters: true,
-        },
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw createAiProviderError(
-        payload.error && payload.error.message ? payload.error.message : 'OpenRouter request failed',
-        response.status === 429 ? 429 : 502,
-        normalizeOpenRouterMeta(payload)
-      );
-    }
-    const meta = normalizeOpenRouterMeta(payload);
+  const maxAttempts = 1 + normalizeInteger(config.retryCount, 0, 3, 1);
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), config.timeoutMs || 8000);
     try {
-      return createAiResult(parseOpenRouterJson(payload), meta);
+      const response = await fetch(config.baseUrl || DEFAULT_OPENROUTER_BASE_URL, {
+        method: 'POST',
+        headers,
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: normalizeProviderModel('openrouter', config.model),
+          messages,
+          response_format: responseFormat,
+          provider: {
+            require_parameters: true,
+          },
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw createAiProviderError(
+          payload.error && payload.error.message ? payload.error.message : 'OpenRouter request failed',
+          response.status === 429 ? 429 : 502,
+          normalizeOpenRouterMeta(payload)
+        );
+      }
+      const meta = normalizeOpenRouterMeta(payload);
+      try {
+        return createAiResult(parseOpenRouterJson(payload), meta);
+      } catch (error) {
+        error.aiMeta = meta;
+        throw error;
+      }
     } catch (error) {
-      error.aiMeta = meta;
-      throw error;
+      const normalizedError = error.name === 'AbortError'
+        ? createAiProviderError('OpenRouter request timed out', 504)
+        : error;
+      if (attempt < maxAttempts - 1 && shouldRetryOpenRouterError(normalizedError)) {
+        await sleep(100 * (attempt + 1));
+        continue;
+      }
+      throw normalizedError;
+    } finally {
+      clearTimeout(timeout);
     }
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      throw createAiProviderError('OpenRouter request timed out', 504);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
   }
+  throw createAiProviderError('OpenRouter request failed', 502);
 }
 
 function buildSystemPrompt() {

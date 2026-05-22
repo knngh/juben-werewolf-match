@@ -59,6 +59,7 @@ AI_PROVIDER=openrouter
 AI_MODEL=openrouter/free
 AI_API_KEY=your-openrouter-key
 AI_APP_TITLE=juben-werewolf-match
+AI_RETRY_COUNT=1
 ```
 
 真实模型接入时，模型 Key 只能放在后端 `.env` 的 `AI_API_KEY`。

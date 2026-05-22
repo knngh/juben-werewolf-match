@@ -23,6 +23,10 @@ const AI_API_KEY = process.env.AI_API_KEY || '';
 const AI_MODEL = process.env.AI_MODEL || '';
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 8000;
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT) || 200;
+const AI_RETRY_COUNT_VALUE = Number(process.env.AI_RETRY_COUNT);
+const AI_RETRY_COUNT = Number.isInteger(AI_RETRY_COUNT_VALUE)
+  ? Math.max(0, Math.min(3, AI_RETRY_COUNT_VALUE))
+  : 1;
 const AI_BASE_URL = process.env.AI_BASE_URL || '';
 const AI_SITE_URL = process.env.AI_SITE_URL || '';
 const AI_APP_TITLE = process.env.AI_APP_TITLE || 'juben-werewolf-match';
@@ -204,6 +208,7 @@ function getAiConfig() {
     model: AI_MODEL || '',
     timeoutMs: AI_TIMEOUT_MS,
     dailyLimit: AI_DAILY_LIMIT,
+    retryCount: AI_RETRY_COUNT,
     baseUrl: AI_BASE_URL,
     siteUrl: AI_SITE_URL,
     appTitle: AI_APP_TITLE,

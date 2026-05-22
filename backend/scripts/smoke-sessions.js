@@ -83,6 +83,19 @@ function startOpenRouterMock() {
       const schemaName = payload.response_format && payload.response_format.json_schema
         ? payload.response_format.json_schema.name
         : '';
+      const schemaCallCount = calls.filter((item) => {
+        const itemFormat = item.payload.response_format || {};
+        const itemSchema = itemFormat.json_schema || {};
+        return itemSchema.name === schemaName;
+      }).length;
+      if (schemaName === 'session_draft' && schemaCallCount === 1) {
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          id: `openrouter-smoke-${calls.length}`,
+          error: { message: 'temporary upstream failure' },
+        }));
+        return;
+      }
       const content = schemaName === 'report_classification'
         ? '{not valid json'
         : JSON.stringify({
@@ -148,6 +161,7 @@ function startServer(overrides = {}) {
       AI_BASE_URL: overrides.aiBaseUrl || '',
       AI_SITE_URL: overrides.aiSiteUrl || '',
       AI_APP_TITLE: overrides.aiAppTitle || 'juben-werewolf-match-smoke',
+      AI_RETRY_COUNT: Object.prototype.hasOwnProperty.call(overrides, 'aiRetryCount') ? overrides.aiRetryCount : '1',
       AI_DAILY_LIMIT: '20',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -353,11 +367,11 @@ async function runOpenRouterSmoke() {
       draft.data.provider !== 'openrouter' ||
       draft.data.model !== 'openrouter/free' ||
       draft.data.draft.gameType !== '桌游' ||
-      openRouterMock.calls.length !== 1
+      openRouterMock.calls.length !== 2
     ) {
-      throw new Error('OpenRouter session draft should use the provider response');
+      throw new Error('OpenRouter session draft should retry once and use the provider response');
     }
-    const headers = openRouterMock.calls[0].headers;
+    const headers = openRouterMock.calls[1].headers;
     if (headers['http-referer'] !== 'https://example.com' || headers['x-openrouter-title'] !== 'juben smoke') {
       throw new Error('OpenRouter optional app headers should be forwarded');
     }
@@ -380,7 +394,7 @@ async function runOpenRouterSmoke() {
       if (
         !sessionDraftLog ||
         sessionDraftLog.output_status !== 'ok' ||
-        sessionDraftLog.provider_request_id !== 'openrouter-smoke-1' ||
+        sessionDraftLog.provider_request_id !== 'openrouter-smoke-2' ||
         sessionDraftLog.prompt_tokens !== 12 ||
         sessionDraftLog.completion_tokens !== 8 ||
         sessionDraftLog.total_tokens !== 20 ||
@@ -391,7 +405,7 @@ async function runOpenRouterSmoke() {
       if (
         !classificationLog ||
         classificationLog.output_status !== 'error' ||
-        classificationLog.provider_request_id !== 'openrouter-smoke-2' ||
+        classificationLog.provider_request_id !== 'openrouter-smoke-3' ||
         classificationLog.prompt_tokens !== 9 ||
         classificationLog.completion_tokens !== 3 ||
         classificationLog.total_tokens !== 12 ||
