@@ -23,6 +23,10 @@ const AI_API_KEY = process.env.AI_API_KEY || '';
 const AI_MODEL = process.env.AI_MODEL || '';
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 8000;
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT) || 200;
+const AI_DAILY_COST_LIMIT_VALUE = Number(process.env.AI_DAILY_COST_LIMIT);
+const AI_DAILY_COST_LIMIT = Number.isFinite(AI_DAILY_COST_LIMIT_VALUE)
+  ? Math.max(0, AI_DAILY_COST_LIMIT_VALUE)
+  : 0;
 const AI_RETRY_COUNT_VALUE = Number(process.env.AI_RETRY_COUNT);
 const AI_RETRY_COUNT = Number.isInteger(AI_RETRY_COUNT_VALUE)
   ? Math.max(0, Math.min(3, AI_RETRY_COUNT_VALUE))
@@ -208,6 +212,7 @@ function getAiConfig() {
     model: AI_MODEL || '',
     timeoutMs: AI_TIMEOUT_MS,
     dailyLimit: AI_DAILY_LIMIT,
+    dailyCostLimit: AI_DAILY_COST_LIMIT,
     retryCount: AI_RETRY_COUNT,
     baseUrl: AI_BASE_URL,
     siteUrl: AI_SITE_URL,
@@ -257,6 +262,17 @@ function requireAiQuota(res, userId) {
   if ((row.count || 0) >= AI_DAILY_LIMIT) {
     res.status(429).json({ code: 429, message: '今日 AI 使用次数已达上限' });
     return false;
+  }
+  if (AI_DAILY_COST_LIMIT > 0) {
+    const costRow = db.prepare(`
+      SELECT SUM(COALESCE(cost_credits, 0)) AS cost
+      FROM ai_usage_logs
+      WHERE date(created_at) = date('now')
+    `).get();
+    if (Number(costRow.cost || 0) >= AI_DAILY_COST_LIMIT) {
+      res.status(429).json({ code: 429, message: '今日 AI 成本预算已达上限' });
+      return false;
+    }
   }
   return true;
 }

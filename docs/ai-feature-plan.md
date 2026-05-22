@@ -173,7 +173,7 @@ ai_usage_logs
 
 ## 已完成基础层
 
-- 后端环境变量：`AI_ENABLED`、`AI_PROVIDER`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS`、`AI_RETRY_COUNT`、`AI_DAILY_LIMIT`。
+- 后端环境变量：`AI_ENABLED`、`AI_PROVIDER`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS`、`AI_RETRY_COUNT`、`AI_DAILY_COST_LIMIT`、`AI_DAILY_LIMIT`。
 - AI 用量日志表：`ai_usage_logs`。
 - 能力查询：`GET /api/ai/capabilities`。
 - 发布草稿接口：`POST /api/ai/session-draft`。
@@ -187,7 +187,7 @@ ai_usage_logs
 - OpenRouter provider：`AI_PROVIDER=openrouter` 时走 OpenRouter Chat Completions 兼容接口，默认模型 `openrouter/free`。
 - OpenRouter 用量元数据：provider request id、tokens 和 cost credits 会写入 `ai_usage_logs`，并在运营摘要中提供聚合统计。
 - AI 输出归一化：发布草稿、留言、匹配解释、举报归类和运营摘要返回前都会走结构化校验。
-- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要、未实现 provider guard、OpenRouter fake provider、临时失败重试、用量记录和结构化异常。
+- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要、未实现 provider guard、OpenRouter fake provider、临时失败重试、成本预算拦截、用量记录和结构化异常。
 
 小程序 UI 已接入：
 
@@ -199,4 +199,4 @@ ai_usage_logs
 下一步是真实模型供应商完善：
 
 - 用真实 OpenRouter key 做生产前联调。
-- 根据首批真实调用校准成本展示和告警阈值。
+- 根据首批真实调用校准成本告警阈值。

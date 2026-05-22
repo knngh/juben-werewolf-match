@@ -514,6 +514,7 @@ curl http://127.0.0.1:3000/api/health
 - P13.8 接入 OpenRouter provider，默认走 `openrouter/free` 免费路由，并用 fake provider smoke 覆盖结构化请求。（已完成）
 - P13.9 记录 OpenRouter request id、token 和 cost 元数据，运营摘要暴露聚合 AI 用量，并覆盖结构化异常 smoke。（已完成）
 - P13.10 为 OpenRouter provider 增加可配置短重试，临时 429/5xx/网络/超时错误最多重试 1 次。（已完成）
+- P13.11 增加 `AI_DAILY_COST_LIMIT` 全站日成本预算保护，超过当天 cost 聚合后阻断新 AI 调用。（已完成）
 
 验收：
 

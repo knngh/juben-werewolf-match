@@ -88,6 +88,7 @@ function getAiCapabilities(config) {
     model: normalizeProviderModel(providerStatus.provider, config.model),
     timeoutMs: config.timeoutMs,
     dailyLimit: config.dailyLimit,
+    dailyCostLimit: config.dailyCostLimit || 0,
     features: providerStatus.features,
   };
 }

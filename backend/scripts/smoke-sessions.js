@@ -11,11 +11,13 @@ const GEO_PORT = 3128;
 const AI_GUARD_PORT = 3129;
 const OPENROUTER_PORT = 3130;
 const OPENROUTER_BACKEND_PORT = 3131;
+const AI_COST_GUARD_PORT = 3132;
 const BASE = `http://127.0.0.1:${PORT}`;
 const GEO_BASE = `http://127.0.0.1:${GEO_PORT}/search`;
 const AI_GUARD_BASE = `http://127.0.0.1:${AI_GUARD_PORT}`;
 const OPENROUTER_BASE = `http://127.0.0.1:${OPENROUTER_BACKEND_PORT}`;
 const OPENROUTER_API_BASE = `http://127.0.0.1:${OPENROUTER_PORT}/api/v1/chat/completions`;
+const AI_COST_GUARD_BASE = `http://127.0.0.1:${AI_COST_GUARD_PORT}`;
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jwm-smoke-'));
 const dbPath = path.join(tmpDir, 'data.db');
 
@@ -162,6 +164,7 @@ function startServer(overrides = {}) {
       AI_SITE_URL: overrides.aiSiteUrl || '',
       AI_APP_TITLE: overrides.aiAppTitle || 'juben-werewolf-match-smoke',
       AI_RETRY_COUNT: Object.prototype.hasOwnProperty.call(overrides, 'aiRetryCount') ? overrides.aiRetryCount : '1',
+      AI_DAILY_COST_LIMIT: Object.prototype.hasOwnProperty.call(overrides, 'aiDailyCostLimit') ? overrides.aiDailyCostLimit : '0',
       AI_DAILY_LIMIT: '20',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -330,6 +333,47 @@ async function runAiProviderGuardSmoke() {
   }
 }
 
+async function runAiCostLimitSmoke() {
+  const costDbPath = path.join(tmpDir, 'ai-cost-limit.db');
+  const server = startServer({
+    port: AI_COST_GUARD_PORT,
+    dbPath: costDbPath,
+    aiProvider: 'mock',
+    aiDailyCostLimit: '0.5',
+  });
+  try {
+    await waitForServer(AI_COST_GUARD_BASE);
+    const user = await requestAt(AI_COST_GUARD_BASE, 'POST', '/api/register', {
+      nickname: 'AI 成本测试',
+      wechat: 'ai_cost_smoke',
+      password: '123456',
+    });
+    const capabilities = await requestAt(AI_COST_GUARD_BASE, 'GET', '/api/ai/capabilities', null, user.data.token);
+    if (capabilities.data.dailyCostLimit !== 0.5) {
+      throw new Error('AI capabilities should expose daily cost limit');
+    }
+    const logDb = new Database(costDbPath);
+    try {
+      logDb.prepare(`
+        INSERT INTO ai_usage_logs (
+          user_id, feature, input_hash, output_status, provider, model, latency_ms, cost_credits
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(user.data.userId, 'sessionDraft', 'cost-limit-smoke', 'ok', 'openrouter', 'openrouter/free', 10, 0.5);
+    } finally {
+      logDb.close();
+    }
+    const blocked = await expectFailureAt(AI_COST_GUARD_BASE, 'POST', '/api/ai/session-draft', {
+      prompt: '周五晚上海桌游',
+    }, user.data.token);
+    if (blocked.code !== 429 || !String(blocked.message || '').includes('成本预算')) {
+      throw new Error('AI daily cost limit should block new AI calls');
+    }
+  } finally {
+    server.kill();
+  }
+}
+
 async function runOpenRouterSmoke() {
   const openRouterMock = startOpenRouterMock();
   const openRouterDbPath = path.join(tmpDir, 'openrouter-provider.db');
@@ -427,6 +471,7 @@ async function main() {
   const geoMock = startGeoMock();
   await listen(geoMock, GEO_PORT);
   await runAiProviderGuardSmoke();
+  await runAiCostLimitSmoke();
   await runOpenRouterSmoke();
   const server = startServer();
   try {
