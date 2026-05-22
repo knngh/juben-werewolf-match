@@ -6,8 +6,10 @@ const path = require('path');
 
 const PORT = 3127;
 const GEO_PORT = 3128;
+const AI_GUARD_PORT = 3129;
 const BASE = `http://127.0.0.1:${PORT}`;
 const GEO_BASE = `http://127.0.0.1:${GEO_PORT}/search`;
+const AI_GUARD_BASE = `http://127.0.0.1:${AI_GUARD_PORT}`;
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jwm-smoke-'));
 const dbPath = path.join(tmpDir, 'data.db');
 
@@ -47,20 +49,21 @@ function listen(server, port) {
   return new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
 }
 
-function startServer() {
+function startServer(overrides = {}) {
   const child = spawn(process.execPath, ['server.js'], {
     cwd: path.join(__dirname, '..'),
     env: {
       ...process.env,
-      PORT: String(PORT),
-      DB_PATH: dbPath,
+      PORT: String(overrides.port || PORT),
+      DB_PATH: overrides.dbPath || dbPath,
       JWT_SECRET: 'smoke-secret',
       TIANDITU_KEY: 'smoke-tianditu-key',
       TIANDITU_SEARCH_URL: GEO_BASE,
       WECHAT_LOGIN_DEV_MODE: 'true',
-      AI_ENABLED: 'true',
-      AI_PROVIDER: 'mock',
-      AI_MODEL: 'mock-v1',
+      AI_ENABLED: overrides.aiEnabled || 'true',
+      AI_PROVIDER: overrides.aiProvider || 'mock',
+      AI_API_KEY: overrides.aiApiKey || '',
+      AI_MODEL: overrides.aiModel || 'mock-v1',
       AI_DAILY_LIMIT: '20',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -71,11 +74,11 @@ function startServer() {
   return child;
 }
 
-async function waitForServer() {
+async function waitForServer(base = BASE) {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${BASE}/api/options`);
+      const res = await fetch(`${base}/api/options`);
       if (res.ok) return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -84,8 +87,8 @@ async function waitForServer() {
   throw new Error('Server did not start in time');
 }
 
-async function request(method, url, body, token) {
-  const res = await fetch(`${BASE}${url}`, {
+async function requestAt(base, method, url, body, token) {
+  const res = await fetch(`${base}${url}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -100,8 +103,12 @@ async function request(method, url, body, token) {
   return data;
 }
 
-async function expectFailure(method, url, body, token) {
-  const res = await fetch(`${BASE}${url}`, {
+async function request(method, url, body, token) {
+  return requestAt(BASE, method, url, body, token);
+}
+
+async function expectFailureAt(base, method, url, body, token) {
+  const res = await fetch(`${base}${url}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -114,6 +121,10 @@ async function expectFailure(method, url, body, token) {
     throw new Error(`${method} ${url} should have failed`);
   }
   return data;
+}
+
+async function expectFailure(method, url, body, token) {
+  return expectFailureAt(BASE, method, url, body, token);
 }
 
 async function register(nickname, wechat) {
@@ -131,9 +142,34 @@ function addDays(days) {
   return date.toISOString().slice(0, 10);
 }
 
+async function runAiProviderGuardSmoke() {
+  const guardServer = startServer({
+    port: AI_GUARD_PORT,
+    dbPath: path.join(tmpDir, 'ai-provider-guard.db'),
+    aiProvider: 'openai',
+    aiApiKey: 'fake-smoke-key',
+    aiModel: 'fake-model',
+  });
+  try {
+    await waitForServer(AI_GUARD_BASE);
+    const health = await requestAt(AI_GUARD_BASE, 'GET', '/api/health');
+    if (
+      health.data.ai.ready !== false ||
+      health.data.ai.providerSupported !== false ||
+      health.data.ai.providerConfigured !== true ||
+      health.data.ai.features.sessionDraft !== false
+    ) {
+      throw new Error('Unsupported AI provider should not expose ready features');
+    }
+  } finally {
+    guardServer.kill();
+  }
+}
+
 async function main() {
   const geoMock = startGeoMock();
   await listen(geoMock, GEO_PORT);
+  await runAiProviderGuardSmoke();
   const server = startServer();
   try {
     await waitForServer();

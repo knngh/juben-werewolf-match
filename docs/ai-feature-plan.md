@@ -177,7 +177,9 @@ ai_usage_logs
 - 举报归类接口：`POST /api/ai/report-classification`。
 - 运营摘要接口：`GET /api/ai/ops-summary`。
 - 本地 mock provider：`AI_PROVIDER=mock`。
-- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类和运营摘要。
+- provider 能力表：未实现供应商不会向前端暴露 ready 功能。
+- AI 输出归一化：发布草稿、留言、匹配解释、举报归类和运营摘要返回前都会走结构化校验。
+- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要和未实现 provider guard。
 
 小程序 UI 已接入：
 
@@ -188,6 +190,6 @@ ai_usage_logs
 
 下一步是真实模型供应商接入：
 
-- 增加 provider 适配层。
-- 使用结构化 JSON 输出校验。
-- 加入超时、重试和成本统计。
+- 增加真实 provider 调用适配层。
+- 为真实 provider 加入超时、重试和成本统计。
+- 针对真实 provider 补失败降级和结构化输出异常 smoke。

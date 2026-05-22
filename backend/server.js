@@ -38,6 +38,17 @@ const PLAY_MODES = ['线下', '线上'];
 const EXCLUDED_GAME_TYPES = ['麻将', '德州扑克', '象棋', '围棋', '扑克', '棋牌'];
 const REQUEST_CERTAINTY = ['confirmed', 'tentative', 'chat_first'];
 const REPORT_REASONS = ['骚扰', '鸽局', '虚假信息', '不合适内容', '其他'];
+const AI_FEATURE_KEYS = ['sessionDraft', 'requestMessage', 'matchExplanation', 'reportClassification', 'opsSummary'];
+const AI_PROVIDER_FEATURES = {
+  mock: {
+    sessionDraft: true,
+    requestMessage: true,
+    matchExplanation: true,
+    reportClassification: true,
+    opsSummary: true,
+  },
+};
+const AI_SEVERITY_LEVELS = ['low', 'medium', 'high'];
 
 app.get('/api/options', (req, res) => {
   res.json({
@@ -180,24 +191,40 @@ function toBooleanFlag(value, fallback = true) {
   return fallback ? 1 : 0;
 }
 
+function emptyAiFeatures() {
+  return AI_FEATURE_KEYS.reduce((features, key) => {
+    features[key] = false;
+    return features;
+  }, {});
+}
+
+function getAiProviderStatus() {
+  const provider = AI_PROVIDER || '';
+  const providerFeatures = AI_PROVIDER_FEATURES[provider] || null;
+  const providerSupported = !!providerFeatures;
+  const providerConfigured = provider === 'mock' ? true : !!AI_API_KEY;
+  const ready = AI_ENABLED && !!provider && providerSupported && providerConfigured;
+  return {
+    provider,
+    providerSupported,
+    providerConfigured,
+    ready,
+    features: ready ? { ...emptyAiFeatures(), ...providerFeatures } : emptyAiFeatures(),
+  };
+}
+
 function getAiCapabilities() {
-  const providerReady = AI_PROVIDER === 'mock' || !!AI_API_KEY;
-  const ready = AI_ENABLED && !!AI_PROVIDER && providerReady;
-  const mockFeatureReady = ready && AI_PROVIDER === 'mock';
+  const providerStatus = getAiProviderStatus();
   return {
     enabled: AI_ENABLED,
-    ready,
-    provider: AI_PROVIDER || '',
+    ready: providerStatus.ready,
+    provider: providerStatus.provider,
+    providerSupported: providerStatus.providerSupported,
+    providerConfigured: providerStatus.providerConfigured,
     model: AI_MODEL || '',
     timeoutMs: AI_TIMEOUT_MS,
     dailyLimit: AI_DAILY_LIMIT,
-    features: {
-      sessionDraft: mockFeatureReady,
-      requestMessage: mockFeatureReady,
-      matchExplanation: mockFeatureReady,
-      reportClassification: mockFeatureReady,
-      opsSummary: mockFeatureReady,
-    },
+    features: providerStatus.features,
   };
 }
 
@@ -205,6 +232,18 @@ function requireAiReady(res, feature) {
   const capabilities = getAiCapabilities();
   if (!capabilities.enabled) {
     res.status(503).json({ code: 503, message: 'AI 功能未开启', data: { feature, capabilities } });
+    return false;
+  }
+  if (!capabilities.provider) {
+    res.status(503).json({ code: 503, message: 'AI 服务未配置', data: { feature, capabilities } });
+    return false;
+  }
+  if (!capabilities.providerSupported) {
+    res.status(503).json({ code: 503, message: 'AI 供应商暂未支持', data: { feature, capabilities } });
+    return false;
+  }
+  if (!capabilities.providerConfigured) {
+    res.status(503).json({ code: 503, message: 'AI 服务未配置', data: { feature, capabilities } });
     return false;
   }
   if (!capabilities.ready) {
@@ -248,6 +287,85 @@ function logAiUsage({ userId, feature, input, outputStatus, startedAt }) {
     AI_MODEL || '',
     Math.max(0, Date.now() - startedAt)
   );
+}
+
+function normalizeInteger(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isInteger(number)) return fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+function normalizeAiTextOutput(value, maxLength, fallback = '') {
+  return normalizeText(value, maxLength) || fallback;
+}
+
+function normalizeAiSessionDraft(draft = {}, profile = {}) {
+  const profileGameType = (profile.gameTypes || []).find((item) => GAME_TYPES.includes(item));
+  const gameType = GAME_TYPES.includes(draft.gameType) && !EXCLUDED_GAME_TYPES.includes(draft.gameType)
+    ? draft.gameType
+    : profileGameType || '桌游';
+  const minPlayers = normalizeInteger(draft.minPlayers, 1, 30, gameType === '跑团' ? 3 : 2);
+  const maxPlayers = Math.max(minPlayers, normalizeInteger(draft.maxPlayers, minPlayers, 30, 6));
+  const currentPlayers = normalizeInteger(draft.currentPlayers, 1, maxPlayers, 1);
+  const playMode = PLAY_MODES.includes(draft.playMode) ? draft.playMode : '线下';
+  const budgetRange = BUDGET_RANGES.includes(draft.budgetRange)
+    ? draft.budgetRange
+    : BUDGET_RANGES.includes(profile.budgetRange) ? profile.budgetRange : '看局而定';
+
+  return {
+    gameType,
+    title: normalizeText(draft.title, 40) || `${gameType}组局`,
+    city: normalizeCityName(draft.city || profile.city),
+    area: normalizeText(draft.area, 20),
+    address: normalizeText(draft.address, 80),
+    playDate: normalizeText(draft.playDate, 10),
+    playTime: normalizeText(draft.playTime, 8),
+    playMode,
+    budgetRange,
+    minPlayers,
+    maxPlayers,
+    currentPlayers,
+    tags: normalizeTags(draft.tags).filter((tag) => !EXCLUDED_GAME_TYPES.includes(tag)),
+    note: normalizeText(draft.note, 500),
+    contactNote: normalizeText(draft.contactNote, 200) || '申请通过后再交换联系方式或拉群。',
+  };
+}
+
+function normalizeAiReportClassification(classification = {}) {
+  const reason = REPORT_REASONS.includes(classification.reason) ? classification.reason : '其他';
+  const severity = AI_SEVERITY_LEVELS.includes(classification.severity) ? classification.severity : 'low';
+  const rawConfidence = Number(classification.confidence);
+  const confidence = Number.isFinite(rawConfidence)
+    ? Math.min(1, Math.max(0, Math.round(rawConfidence * 100) / 100))
+    : 0.5;
+  return {
+    reason,
+    severity,
+    confidence,
+    summary: normalizeAiTextOutput(classification.summary, 120, `建议按“${reason}”复核。`),
+    suggestedAction: normalizeAiTextOutput(classification.suggestedAction, 120, '进入人工复核队列。'),
+  };
+}
+
+function normalizeAiOpsSummary(summary = {}, snapshot = {}) {
+  const stats = snapshot.stats || {};
+  const feedback = snapshot.feedback || {};
+  const highlights = Array.isArray(summary.highlights)
+    ? normalizeTags(summary.highlights).slice(0, 5)
+    : [];
+  const normalizedHighlights = highlights.length ? highlights : [
+    `当前开放局 ${stats.openSessions || 0} 个，待处理申请 ${stats.pendingRequests || 0} 个。`,
+    `开放举报 ${stats.openReports || 0} 条。`,
+    `局后反馈 ${feedback.total || 0} 条，愿意再约 ${feedback.wouldPlayAgain || 0} 条。`,
+  ];
+  const actions = Array.isArray(summary.actions)
+    ? normalizeTags(summary.actions).slice(0, 5)
+    : [];
+  return {
+    summary: normalizeAiTextOutput(summary.summary, 240, normalizedHighlights.join('')),
+    highlights: normalizedHighlights,
+    actions: actions.length ? actions : ['维持现有监控，关注新增举报和申请积压。'],
+  };
 }
 
 function pickFirstMention(text, values, fallback = '') {
@@ -1166,7 +1284,7 @@ app.post(
         return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
       }
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
-      const draft = buildMockSessionDraft(req.body.prompt, profile);
+      const draft = normalizeAiSessionDraft(buildMockSessionDraft(req.body.prompt, profile), profile);
       logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'ok', startedAt });
       res.json({ code: 0, data: { draft, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
     } catch (error) {
@@ -1200,7 +1318,7 @@ app.post(
         return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
       }
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
-      const message = buildMockRequestMessage(profile, session);
+      const message = normalizeAiTextOutput(buildMockRequestMessage(profile, session), 200, '我对这个局比较感兴趣，希望能加入。');
       logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'ok', startedAt });
       res.json({ code: 0, data: { message, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
     } catch (error) {
@@ -1235,7 +1353,11 @@ app.post(
       }
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
       const match = scoreSessionMatch(session, profile);
-      const explanation = buildMockMatchExplanation(profile, session, match.reasons);
+      const explanation = normalizeAiTextOutput(
+        buildMockMatchExplanation(profile, session, match.reasons),
+        220,
+        '可以结合时间、地点、预算和局主说明判断是否适合你。'
+      );
       logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'ok', startedAt });
       res.json({ code: 0, data: { explanation, reasons: match.reasons, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
     } catch (error) {
@@ -1269,7 +1391,7 @@ app.post(
         logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'provider_not_implemented', startedAt });
         return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
       }
-      const classification = buildMockReportClassification(input);
+      const classification = normalizeAiReportClassification(buildMockReportClassification(input));
       logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'ok', startedAt });
       res.json({ code: 0, data: { classification, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
     } catch (error) {
@@ -1290,7 +1412,7 @@ app.get('/api/ai/ops-summary', requireAuth, (req, res) => {
       return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
     }
     const snapshot = getOpsSignalSnapshot(req.userId);
-    const summary = buildMockOpsSummary(snapshot);
+    const summary = normalizeAiOpsSummary(buildMockOpsSummary(snapshot), snapshot);
     logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'ok', startedAt });
     res.json({
       code: 0,
