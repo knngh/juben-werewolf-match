@@ -8,9 +8,13 @@ const ai = require('../ai');
 const PORT = 3127;
 const GEO_PORT = 3128;
 const AI_GUARD_PORT = 3129;
+const OPENROUTER_PORT = 3130;
+const OPENROUTER_BACKEND_PORT = 3131;
 const BASE = `http://127.0.0.1:${PORT}`;
 const GEO_BASE = `http://127.0.0.1:${GEO_PORT}/search`;
 const AI_GUARD_BASE = `http://127.0.0.1:${AI_GUARD_PORT}`;
+const OPENROUTER_BASE = `http://127.0.0.1:${OPENROUTER_BACKEND_PORT}`;
+const OPENROUTER_API_BASE = `http://127.0.0.1:${OPENROUTER_PORT}/api/v1/chat/completions`;
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jwm-smoke-'));
 const dbPath = path.join(tmpDir, 'data.db');
 
@@ -46,6 +50,67 @@ function startGeoMock() {
   });
 }
 
+function startOpenRouterMock() {
+  const calls = [];
+  const server = http.createServer((req, res) => {
+    if (req.method !== 'POST' || req.url !== '/api/v1/chat/completions') {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'not found' } }));
+      return;
+    }
+
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      const payload = JSON.parse(body || '{}');
+      calls.push({ headers: req.headers, payload });
+      if (
+        req.headers.authorization !== 'Bearer fake-openrouter-key' ||
+        payload.model !== 'openrouter/free' ||
+        !payload.response_format ||
+        payload.response_format.type !== 'json_schema' ||
+        !payload.provider ||
+        payload.provider.require_parameters !== true
+      ) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'bad openrouter request' } }));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                gameType: '桌游',
+                title: '上海周五晚桌游局',
+                city: '上海',
+                area: '',
+                address: '',
+                playDate: '',
+                playTime: '19:30',
+                playMode: '线下',
+                budgetRange: '看局而定',
+                minPlayers: 2,
+                maxPlayers: 6,
+                currentPlayers: 1,
+                tags: ['新手友好', '桌游'],
+                note: '想组一个新手友好的桌游局。',
+                contactNote: '申请通过后再交换联系方式或拉群。',
+              }),
+            },
+          },
+        ],
+      }));
+    });
+  });
+  server.calls = calls;
+  return server;
+}
+
 function listen(server, port) {
   return new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
 }
@@ -64,7 +129,10 @@ function startServer(overrides = {}) {
       AI_ENABLED: overrides.aiEnabled || 'true',
       AI_PROVIDER: overrides.aiProvider || 'mock',
       AI_API_KEY: overrides.aiApiKey || '',
-      AI_MODEL: overrides.aiModel || 'mock-v1',
+      AI_MODEL: Object.prototype.hasOwnProperty.call(overrides, 'aiModel') ? overrides.aiModel : 'mock-v1',
+      AI_BASE_URL: overrides.aiBaseUrl || '',
+      AI_SITE_URL: overrides.aiSiteUrl || '',
+      AI_APP_TITLE: overrides.aiAppTitle || 'juben-werewolf-match-smoke',
       AI_DAILY_LIMIT: '20',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -143,7 +211,7 @@ function addDays(days) {
   return date.toISOString().slice(0, 10);
 }
 
-function runAiModuleSmoke() {
+async function runAiModuleSmoke() {
   const options = {
     gameTypes: ['剧本杀', '狼人杀', '桌游'],
     playStyles: ['推理型', '欢乐型'],
@@ -196,6 +264,17 @@ function runAiModuleSmoke() {
   ) {
     throw new Error('AI module should normalize report classification output');
   }
+  const unsupportedProviderError = await ai.generateSessionDraft({
+    enabled: true,
+    provider: 'openai',
+    apiKey: 'fake-smoke-key',
+    model: 'fake-model',
+    timeoutMs: 8000,
+    dailyLimit: 20,
+  }, '周五晚桌游', {}, options).then(() => null).catch((error) => error);
+  if (!unsupportedProviderError || unsupportedProviderError.status !== 501) {
+    throw new Error('AI module should reject unsupported provider calls');
+  }
 }
 
 async function runAiProviderGuardSmoke() {
@@ -222,11 +301,62 @@ async function runAiProviderGuardSmoke() {
   }
 }
 
+async function runOpenRouterSmoke() {
+  const openRouterMock = startOpenRouterMock();
+  await listen(openRouterMock, OPENROUTER_PORT);
+  const server = startServer({
+    port: OPENROUTER_BACKEND_PORT,
+    dbPath: path.join(tmpDir, 'openrouter-provider.db'),
+    aiProvider: 'openrouter',
+    aiApiKey: 'fake-openrouter-key',
+    aiModel: '',
+    aiBaseUrl: OPENROUTER_API_BASE,
+    aiSiteUrl: 'https://example.com',
+    aiAppTitle: 'juben smoke',
+  });
+  try {
+    await waitForServer(OPENROUTER_BASE);
+    const user = await requestAt(OPENROUTER_BASE, 'POST', '/api/register', {
+      nickname: 'OpenRouter 测试',
+      wechat: 'openrouter_smoke',
+      password: '123456',
+    });
+    const capabilities = await requestAt(OPENROUTER_BASE, 'GET', '/api/ai/capabilities', null, user.data.token);
+    if (
+      capabilities.data.ready !== true ||
+      capabilities.data.provider !== 'openrouter' ||
+      capabilities.data.model !== 'openrouter/free' ||
+      !capabilities.data.features.sessionDraft
+    ) {
+      throw new Error('OpenRouter provider should expose AI capabilities');
+    }
+    const draft = await requestAt(OPENROUTER_BASE, 'POST', '/api/ai/session-draft', {
+      prompt: '周五晚上海新手友好桌游',
+    }, user.data.token);
+    if (
+      draft.data.provider !== 'openrouter' ||
+      draft.data.model !== 'openrouter/free' ||
+      draft.data.draft.gameType !== '桌游' ||
+      openRouterMock.calls.length !== 1
+    ) {
+      throw new Error('OpenRouter session draft should use the provider response');
+    }
+    const headers = openRouterMock.calls[0].headers;
+    if (headers['http-referer'] !== 'https://example.com' || headers['x-openrouter-title'] !== 'juben smoke') {
+      throw new Error('OpenRouter optional app headers should be forwarded');
+    }
+  } finally {
+    server.kill();
+    openRouterMock.close();
+  }
+}
+
 async function main() {
-  runAiModuleSmoke();
+  await runAiModuleSmoke();
   const geoMock = startGeoMock();
   await listen(geoMock, GEO_PORT);
   await runAiProviderGuardSmoke();
+  await runOpenRouterSmoke();
   const server = startServer();
   try {
     await waitForServer();

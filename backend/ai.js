@@ -7,8 +7,17 @@ const AI_PROVIDER_FEATURES = {
     reportClassification: true,
     opsSummary: true,
   },
+  openrouter: {
+    sessionDraft: true,
+    requestMessage: true,
+    matchExplanation: true,
+    reportClassification: true,
+    opsSummary: true,
+  },
 };
 const AI_SEVERITY_LEVELS = ['low', 'medium', 'high'];
+const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
 
 function normalizeTags(tags) {
   if (!Array.isArray(tags)) return [];
@@ -66,11 +75,17 @@ function getAiCapabilities(config) {
     provider: providerStatus.provider,
     providerSupported: providerStatus.providerSupported,
     providerConfigured: providerStatus.providerConfigured,
-    model: config.model || '',
+    model: normalizeProviderModel(providerStatus.provider, config.model),
     timeoutMs: config.timeoutMs,
     dailyLimit: config.dailyLimit,
     features: providerStatus.features,
   };
+}
+
+function normalizeProviderModel(provider, model) {
+  if (model) return model;
+  if (provider === 'openrouter') return DEFAULT_OPENROUTER_MODEL;
+  return '';
 }
 
 function pickFirstMention(text, values, fallback = '') {
@@ -293,6 +308,320 @@ function normalizeAiOpsSummary(summary = {}, snapshot = {}) {
   };
 }
 
+function buildJsonSchema(name, properties, required) {
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name,
+      strict: true,
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties,
+        required,
+      },
+    },
+  };
+}
+
+function stringEnumSchema(values) {
+  return { type: 'string', enum: values };
+}
+
+function textSchema(maxLength) {
+  return { type: 'string', maxLength };
+}
+
+function buildSessionDraftSchema(options = {}) {
+  return buildJsonSchema('session_draft', {
+    gameType: stringEnumSchema(options.gameTypes || []),
+    title: textSchema(40),
+    city: textSchema(20),
+    area: textSchema(20),
+    address: textSchema(80),
+    playDate: textSchema(10),
+    playTime: textSchema(8),
+    playMode: stringEnumSchema(options.playModes || []),
+    budgetRange: stringEnumSchema(options.budgetRanges || []),
+    minPlayers: { type: 'integer', minimum: 1, maximum: 30 },
+    maxPlayers: { type: 'integer', minimum: 1, maximum: 30 },
+    currentPlayers: { type: 'integer', minimum: 1, maximum: 30 },
+    tags: {
+      type: 'array',
+      items: textSchema(20),
+      maxItems: 8,
+    },
+    note: textSchema(500),
+    contactNote: textSchema(200),
+  }, [
+    'gameType',
+    'title',
+    'city',
+    'area',
+    'address',
+    'playDate',
+    'playTime',
+    'playMode',
+    'budgetRange',
+    'minPlayers',
+    'maxPlayers',
+    'currentPlayers',
+    'tags',
+    'note',
+    'contactNote',
+  ]);
+}
+
+function buildReportClassificationSchema(options = {}) {
+  return buildJsonSchema('report_classification', {
+    reason: stringEnumSchema(options.reportReasons || []),
+    severity: stringEnumSchema(AI_SEVERITY_LEVELS),
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    summary: textSchema(120),
+    suggestedAction: textSchema(120),
+  }, ['reason', 'severity', 'confidence', 'summary', 'suggestedAction']);
+}
+
+function buildOpsSummarySchema() {
+  return buildJsonSchema('ops_summary', {
+    summary: textSchema(240),
+    highlights: {
+      type: 'array',
+      items: textSchema(120),
+      maxItems: 5,
+    },
+    actions: {
+      type: 'array',
+      items: textSchema(120),
+      maxItems: 5,
+    },
+  }, ['summary', 'highlights', 'actions']);
+}
+
+function buildTextObjectSchema(name, field, maxLength) {
+  return buildJsonSchema(name, {
+    [field]: textSchema(maxLength),
+  }, [field]);
+}
+
+function pickOpenRouterContent(payload) {
+  const choice = payload && Array.isArray(payload.choices) ? payload.choices[0] : null;
+  const message = choice && choice.message ? choice.message : {};
+  const content = message.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => item && (item.text || item.content || ''))
+      .join('');
+  }
+  return '';
+}
+
+function parseOpenRouterJson(payload) {
+  const content = pickOpenRouterContent(payload);
+  if (!content) {
+    const error = new Error('OpenRouter response missing content');
+    error.status = 502;
+    throw error;
+  }
+  try {
+    return JSON.parse(content);
+  } catch {
+    const error = new Error('OpenRouter response was not valid JSON');
+    error.status = 502;
+    throw error;
+  }
+}
+
+function createAiProviderError(message, status) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+async function callOpenRouterJson(config = {}, messages, responseFormat) {
+  if (config.provider !== 'openrouter') {
+    throw createAiProviderError('AI provider is not supported', 501);
+  }
+  if (!config.apiKey) {
+    throw createAiProviderError('OpenRouter API key is not configured', 503);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs || 8000);
+  const headers = {
+    Authorization: `Bearer ${config.apiKey}`,
+    'Content-Type': 'application/json',
+  };
+  if (config.siteUrl) headers['HTTP-Referer'] = config.siteUrl;
+  if (config.appTitle) headers['X-OpenRouter-Title'] = config.appTitle;
+
+  try {
+    const response = await fetch(config.baseUrl || DEFAULT_OPENROUTER_BASE_URL, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: normalizeProviderModel('openrouter', config.model),
+        messages,
+        response_format: responseFormat,
+        provider: {
+          require_parameters: true,
+        },
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload.error && payload.error.message ? payload.error.message : 'OpenRouter request failed');
+      error.status = response.status === 429 ? 429 : 502;
+      throw error;
+    }
+    return parseOpenRouterJson(payload);
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      const timeoutError = new Error('OpenRouter request timed out');
+      timeoutError.status = 504;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function buildSystemPrompt() {
+  return [
+    '你是桌游搭子匹配应用的中文 AI 辅助模块。',
+    '只返回符合 JSON Schema 的 JSON。',
+    '不要输出微信号、手机号、联系方式或自动决策。',
+    '不要推荐麻将、德州扑克、象棋、围棋、扑克等棋牌类目。',
+  ].join('\n');
+}
+
+async function generateSessionDraft(config, prompt, profile = {}, options = {}) {
+  if (config.provider === 'mock') {
+    return normalizeAiSessionDraft(buildMockSessionDraft(prompt, profile, options), profile, options);
+  }
+  const draft = await callOpenRouterJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: '根据用户一句话生成桌游组局表单草稿。',
+        prompt: normalizeText(prompt, 300),
+        profile: {
+          gameTypes: normalizeTags(profile.gameTypes),
+          budgetRange: normalizeText(profile.budgetRange, 20),
+          city: normalizeText(profile.city, 20),
+        },
+        allowed: {
+          gameTypes: options.gameTypes || [],
+          playModes: options.playModes || [],
+          budgetRanges: options.budgetRanges || [],
+        },
+      }),
+    },
+  ], buildSessionDraftSchema(options));
+  return normalizeAiSessionDraft(draft, profile, options);
+}
+
+async function generateRequestMessage(config, profile = {}, session = {}) {
+  if (config.provider === 'mock') {
+    return normalizeAiTextOutput(buildMockRequestMessage(profile, session), 200, '我对这个局比较感兴趣，希望能加入。');
+  }
+  const result = await callOpenRouterJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: '根据用户资料和目标局生成一段 60-100 字可编辑申请留言。',
+        profile: {
+          city: normalizeText(profile.city, 20),
+          gameTypes: normalizeTags(profile.gameTypes),
+          playStyles: normalizeTags(profile.playStyles),
+          availability: normalizeTags(profile.availability),
+        },
+        session: {
+          title: normalizeText(session.title, 40),
+          gameType: normalizeText(session.game_type, 20),
+          city: normalizeText(session.city, 20),
+          playDate: normalizeText(session.play_date, 10),
+          playTime: normalizeText(session.play_time, 8),
+          playMode: normalizeText(session.play_mode, 10),
+        },
+      }),
+    },
+  ], buildTextObjectSchema('request_message', 'message', 200));
+  return normalizeAiTextOutput(result.message, 200, '我对这个局比较感兴趣，希望能加入。');
+}
+
+async function generateMatchExplanation(config, profile = {}, session = {}, reasons = []) {
+  if (config.provider === 'mock') {
+    return normalizeAiTextOutput(
+      buildMockMatchExplanation(profile, session, reasons),
+      220,
+      '可以结合时间、地点、预算和局主说明判断是否适合你。'
+    );
+  }
+  const result = await callOpenRouterJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: '把规则匹配理由转成自然、克制的短说明，不做过度承诺。',
+        reasons: normalizeTags(reasons),
+        profile: {
+          city: normalizeText(profile.city, 20),
+          playerCountRange: normalizeText(profile.playerCountRange, 20),
+        },
+        session: {
+          title: normalizeText(session.title, 40),
+          gameType: normalizeText(session.game_type, 20),
+          city: normalizeText(session.city, 20),
+          budgetRange: normalizeText(session.budget_range, 20),
+          playMode: normalizeText(session.play_mode, 10),
+        },
+      }),
+    },
+  ], buildTextObjectSchema('match_explanation', 'explanation', 220));
+  return normalizeAiTextOutput(result.explanation, 220, '可以结合时间、地点、预算和局主说明判断是否适合你。');
+}
+
+async function classifyReport(config, input = {}, options = {}) {
+  if (config.provider === 'mock') {
+    return normalizeAiReportClassification(buildMockReportClassification(input, options), options);
+  }
+  const result = await callOpenRouterJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: '对举报说明做风险标签和摘要，只辅助人工复核，不做自动处罚。',
+        reason: normalizeText(input.reason, 20),
+        detail: normalizeText(input.detail, 300),
+        allowedReasons: options.reportReasons || [],
+      }),
+    },
+  ], buildReportClassificationSchema(options));
+  return normalizeAiReportClassification(result, options);
+}
+
+async function generateOpsSummary(config, snapshot = {}) {
+  if (config.provider === 'mock') {
+    return normalizeAiOpsSummary(buildMockOpsSummary(snapshot), snapshot);
+  }
+  const result = await callOpenRouterJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: '基于聚合运营数据生成简短运营摘要和行动建议，不输出单个用户隐私。',
+        snapshot,
+      }),
+    },
+  ], buildOpsSummarySchema());
+  return normalizeAiOpsSummary(result, snapshot);
+}
+
 module.exports = {
   getAiCapabilities,
   normalizeAiTextOutput,
@@ -304,4 +633,9 @@ module.exports = {
   normalizeAiReportClassification,
   buildMockOpsSummary,
   normalizeAiOpsSummary,
+  generateSessionDraft,
+  generateRequestMessage,
+  generateMatchExplanation,
+  classifyReport,
+  generateOpsSummary,
 };

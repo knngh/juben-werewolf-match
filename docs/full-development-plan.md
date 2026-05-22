@@ -511,6 +511,7 @@ curl http://127.0.0.1:3000/api/health
 - P13.5 增加举报/反馈归类和运营摘要。（mock 已完成）
 - P13.6 收紧 provider 能力表，AI 输出返回前走结构化归一化。（已完成）
 - P13.7 抽出 `backend/ai.js` provider 模块，降低后续真实供应商接入对路由的影响。（已完成）
+- P13.8 接入 OpenRouter provider，默认走 `openrouter/free` 免费路由，并用 fake provider smoke 覆盖结构化请求。（已完成）
 
 验收：
 

@@ -179,8 +179,9 @@ ai_usage_logs
 - 本地 mock provider：`AI_PROVIDER=mock`。
 - provider 能力表：未实现供应商不会向前端暴露 ready 功能。
 - provider 模块：AI 能力、mock 输出和结构化归一化集中在 `backend/ai.js`。
+- OpenRouter provider：`AI_PROVIDER=openrouter` 时走 OpenRouter Chat Completions 兼容接口，默认模型 `openrouter/free`。
 - AI 输出归一化：发布草稿、留言、匹配解释、举报归类和运营摘要返回前都会走结构化校验。
-- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要、未实现 provider guard 和输出归一化。
+- smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要、未实现 provider guard、OpenRouter fake provider 和输出归一化。
 
 小程序 UI 已接入：
 
@@ -189,8 +190,8 @@ ai_usage_logs
 - 局详情增加“AI 解读匹配理由”。
 - 根据 `GET /api/ai/capabilities` 决定是否显示按钮。
 
-下一步是真实模型供应商接入：
+下一步是真实模型供应商完善：
 
-- 增加真实 provider 调用适配层。
-- 为真实 provider 加入超时、重试和成本统计。
-- 针对真实 provider 补失败降级和结构化输出异常 smoke。
+- 用真实 OpenRouter key 做生产前联调。
+- 为真实 provider 加入重试和成本统计。
+- 针对真实 provider 补结构化输出异常 smoke。

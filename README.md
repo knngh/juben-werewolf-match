@@ -51,6 +51,16 @@ AI_PROVIDER=mock
 AI_MODEL=mock-v1
 ```
 
+OpenRouter 免费路由联调可设置：
+
+```bash
+AI_ENABLED=true
+AI_PROVIDER=openrouter
+AI_MODEL=openrouter/free
+AI_API_KEY=your-openrouter-key
+AI_APP_TITLE=juben-werewolf-match
+```
+
 真实模型接入时，模型 Key 只能放在后端 `.env` 的 `AI_API_KEY`。
 
 常用检查：

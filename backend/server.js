@@ -23,6 +23,9 @@ const AI_API_KEY = process.env.AI_API_KEY || '';
 const AI_MODEL = process.env.AI_MODEL || '';
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 8000;
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT) || 200;
+const AI_BASE_URL = process.env.AI_BASE_URL || '';
+const AI_SITE_URL = process.env.AI_SITE_URL || '';
+const AI_APP_TITLE = process.env.AI_APP_TITLE || 'juben-werewolf-match';
 
 app.use(cors());
 app.use(express.json());
@@ -190,14 +193,25 @@ function toBooleanFlag(value, fallback = true) {
 }
 
 function getAiCapabilities() {
-  return ai.getAiCapabilities({
+  return ai.getAiCapabilities(getAiConfig());
+}
+
+function getAiConfig() {
+  return {
     enabled: AI_ENABLED,
     provider: AI_PROVIDER,
     apiKey: AI_API_KEY,
     model: AI_MODEL || '',
     timeoutMs: AI_TIMEOUT_MS,
     dailyLimit: AI_DAILY_LIMIT,
-  });
+    baseUrl: AI_BASE_URL,
+    siteUrl: AI_SITE_URL,
+    appTitle: AI_APP_TITLE,
+  };
+}
+
+function getAiModel() {
+  return getAiCapabilities().model || 'mock';
 }
 
 function requireAiReady(res, feature) {
@@ -256,9 +270,14 @@ function logAiUsage({ userId, feature, input, outputStatus, startedAt }) {
     hashAiInput(input),
     outputStatus,
     AI_PROVIDER || '',
-    AI_MODEL || '',
+    getAiModel(),
     Math.max(0, Date.now() - startedAt)
   );
+}
+
+function sendAiError(res, error, fallbackMessage) {
+  const status = error && Number.isInteger(error.status) ? error.status : 500;
+  res.status(status).json({ code: status, message: fallbackMessage });
 }
 
 function getOpsStats(userId) {
@@ -1023,28 +1042,20 @@ app.post(
   [
     body('prompt').trim().isLength({ min: 1, max: 300 }).withMessage('请用 1-300 字描述想组的局'),
   ],
-  (req, res) => {
+  async (req, res) => {
     if (!requireValidation(req, res)) return;
     if (!requireAiReady(res, 'sessionDraft')) return;
     if (!requireAiQuota(res, req.userId)) return;
     const startedAt = Date.now();
     const input = { prompt: req.body.prompt };
     try {
-      if (AI_PROVIDER !== 'mock') {
-        logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'provider_not_implemented', startedAt });
-        return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
-      }
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
-      const draft = ai.normalizeAiSessionDraft(
-        ai.buildMockSessionDraft(req.body.prompt, profile, AI_OPTIONS),
-        profile,
-        AI_OPTIONS
-      );
+      const draft = await ai.generateSessionDraft(getAiConfig(), req.body.prompt, profile, AI_OPTIONS);
       logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'ok', startedAt });
-      res.json({ code: 0, data: { draft, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
+      res.json({ code: 0, data: { draft, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
       logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'error', startedAt });
-      res.status(500).json({ code: 500, message: '生成发布草稿失败' });
+      sendAiError(res, error, '生成发布草稿失败');
     }
   }
 );
@@ -1055,7 +1066,7 @@ app.post(
   [
     body('sessionId').isInt({ min: 1 }).withMessage('请选择要申请的局'),
   ],
-  (req, res) => {
+  async (req, res) => {
     if (!requireValidation(req, res)) return;
     if (!requireAiReady(res, 'requestMessage')) return;
     if (!requireAiQuota(res, req.userId)) return;
@@ -1068,21 +1079,13 @@ app.post(
         logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'not_found', startedAt });
         return res.status(404).json({ code: 404, message: '游戏局不存在' });
       }
-      if (AI_PROVIDER !== 'mock') {
-        logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'provider_not_implemented', startedAt });
-        return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
-      }
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
-      const message = ai.normalizeAiTextOutput(
-        ai.buildMockRequestMessage(profile, session),
-        200,
-        '我对这个局比较感兴趣，希望能加入。'
-      );
+      const message = await ai.generateRequestMessage(getAiConfig(), profile, session);
       logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'ok', startedAt });
-      res.json({ code: 0, data: { message, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
+      res.json({ code: 0, data: { message, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
       logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'error', startedAt });
-      res.status(500).json({ code: 500, message: '生成申请留言失败' });
+      sendAiError(res, error, '生成申请留言失败');
     }
   }
 );
@@ -1093,7 +1096,7 @@ app.post(
   [
     body('sessionId').isInt({ min: 1 }).withMessage('请选择要解释的局'),
   ],
-  (req, res) => {
+  async (req, res) => {
     if (!requireValidation(req, res)) return;
     if (!requireAiReady(res, 'matchExplanation')) return;
     if (!requireAiQuota(res, req.userId)) return;
@@ -1106,22 +1109,14 @@ app.post(
         logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'not_found', startedAt });
         return res.status(404).json({ code: 404, message: '游戏局不存在' });
       }
-      if (AI_PROVIDER !== 'mock') {
-        logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'provider_not_implemented', startedAt });
-        return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
-      }
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
       const match = scoreSessionMatch(session, profile);
-      const explanation = ai.normalizeAiTextOutput(
-        ai.buildMockMatchExplanation(profile, session, match.reasons),
-        220,
-        '可以结合时间、地点、预算和局主说明判断是否适合你。'
-      );
+      const explanation = await ai.generateMatchExplanation(getAiConfig(), profile, session, match.reasons);
       logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'ok', startedAt });
-      res.json({ code: 0, data: { explanation, reasons: match.reasons, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
+      res.json({ code: 0, data: { explanation, reasons: match.reasons, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
       logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'error', startedAt });
-      res.status(500).json({ code: 500, message: '生成匹配说明失败' });
+      sendAiError(res, error, '生成匹配说明失败');
     }
   }
 );
@@ -1133,7 +1128,7 @@ app.post(
     body('reason').optional({ checkFalsy: true }).isIn(REPORT_REASONS).withMessage('请选择有效举报原因'),
     body('detail').optional({ checkFalsy: true }).trim().isLength({ max: 300 }).withMessage('举报说明最多 300 字'),
   ],
-  (req, res) => {
+  async (req, res) => {
     if (!requireValidation(req, res)) return;
     if (!requireAiReady(res, 'reportClassification')) return;
     if (!requireAiQuota(res, req.userId)) return;
@@ -1146,35 +1141,24 @@ app.post(
     }
     const startedAt = Date.now();
     try {
-      if (AI_PROVIDER !== 'mock') {
-        logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'provider_not_implemented', startedAt });
-        return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
-      }
-      const classification = ai.normalizeAiReportClassification(
-        ai.buildMockReportClassification(input, AI_OPTIONS),
-        AI_OPTIONS
-      );
+      const classification = await ai.classifyReport(getAiConfig(), input, AI_OPTIONS);
       logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'ok', startedAt });
-      res.json({ code: 0, data: { classification, provider: AI_PROVIDER, model: AI_MODEL || 'mock' } });
+      res.json({ code: 0, data: { classification, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
       logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'error', startedAt });
-      res.status(500).json({ code: 500, message: '生成举报归类失败' });
+      sendAiError(res, error, '生成举报归类失败');
     }
   }
 );
 
-app.get('/api/ai/ops-summary', requireAuth, (req, res) => {
+app.get('/api/ai/ops-summary', requireAuth, async (req, res) => {
   if (!requireAiReady(res, 'opsSummary')) return;
   if (!requireAiQuota(res, req.userId)) return;
   const startedAt = Date.now();
   const input = { scope: 'ops-summary' };
   try {
-    if (AI_PROVIDER !== 'mock') {
-      logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'provider_not_implemented', startedAt });
-      return res.status(501).json({ code: 501, message: '当前 AI 供应商暂未接入' });
-    }
     const snapshot = getOpsSignalSnapshot(req.userId);
-    const summary = ai.normalizeAiOpsSummary(ai.buildMockOpsSummary(snapshot), snapshot);
+    const summary = await ai.generateOpsSummary(getAiConfig(), snapshot);
     logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'ok', startedAt });
     res.json({
       code: 0,
@@ -1185,12 +1169,12 @@ app.get('/api/ai/ops-summary', requireAuth, (req, res) => {
         requestBreakdown: snapshot.requestBreakdown,
         feedback: snapshot.feedback,
         provider: AI_PROVIDER,
-        model: AI_MODEL || 'mock',
+        model: getAiModel(),
       },
     });
   } catch (error) {
     logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'error', startedAt });
-    res.status(500).json({ code: 500, message: '生成运营摘要失败' });
+    sendAiError(res, error, '生成运营摘要失败');
   }
 });
 
