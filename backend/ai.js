@@ -21,12 +21,27 @@ const AI_PROVIDER_FEATURES = {
     reportClassification: true,
     opsSummary: true,
   },
+  deepseek: {
+    sessionDraft: true,
+    requestMessage: true,
+    matchExplanation: true,
+    reportClassification: true,
+    opsSummary: true,
+  },
 };
 const AI_SEVERITY_LEVELS = ['low', 'medium', 'high'];
 const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
 const DEFAULT_OPENCODE_BASE_URL = 'https://opencode.ai/zen/v1/chat/completions';
 const DEFAULT_OPENCODE_MODEL = 'nemotron-3-super-free';
+const DEFAULT_DEEPSEEK_BASE_URL = 'https://api.deepseek.com/chat/completions';
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
+const DEFAULT_MAX_TOKENS = 600;
+const DEEPSEEK_FLASH_PRICE_RMB_PER_MILLION = {
+  inputCacheHit: 0.02,
+  inputCacheMiss: 1,
+  output: 2,
+};
 
 function normalizeTags(tags) {
   if (!Array.isArray(tags)) return [];
@@ -58,6 +73,10 @@ function normalizeUsageInteger(value) {
 function normalizeUsageNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function roundUsageCost(value) {
+  return Math.round(Number(value || 0) * 1000000) / 1000000;
 }
 
 function normalizeAiTextOutput(value, maxLength, fallback = '') {
@@ -96,6 +115,7 @@ function getAiCapabilities(config) {
     providerConfigured: providerStatus.providerConfigured,
     model: normalizeProviderModel(providerStatus.provider, config.model),
     timeoutMs: config.timeoutMs,
+    maxTokens: normalizeMaxTokens(config.maxTokens),
     dailyLimit: config.dailyLimit,
     dailyCostLimit: config.dailyCostLimit || 0,
     features: providerStatus.features,
@@ -106,12 +126,21 @@ function normalizeProviderModel(provider, model) {
   if (model) return model;
   if (provider === 'openrouter') return DEFAULT_OPENROUTER_MODEL;
   if (provider === 'opencode') return DEFAULT_OPENCODE_MODEL;
+  if (provider === 'deepseek') return DEFAULT_DEEPSEEK_MODEL;
   return '';
+}
+
+function normalizeMaxTokens(value) {
+  return normalizeInteger(value, 1, 4096, DEFAULT_MAX_TOKENS);
 }
 
 function normalizeChatCompletionsUrl(provider, baseUrl) {
   const configuredUrl = String(baseUrl || '').trim();
-  const defaultUrl = provider === 'opencode' ? DEFAULT_OPENCODE_BASE_URL : DEFAULT_OPENROUTER_BASE_URL;
+  const defaultUrl = provider === 'opencode'
+    ? DEFAULT_OPENCODE_BASE_URL
+    : provider === 'deepseek'
+      ? DEFAULT_DEEPSEEK_BASE_URL
+      : DEFAULT_OPENROUTER_BASE_URL;
   const url = configuredUrl || defaultUrl;
   const normalizedUrl = url.replace(/\/+$/, '');
   return normalizedUrl.endsWith('/chat/completions')
@@ -478,6 +507,38 @@ function normalizeOpenRouterMeta(payload = {}) {
   };
 }
 
+function getDeepSeekUsageInteger(usage, keys) {
+  for (const key of keys) {
+    const value = normalizeUsageInteger(usage[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function estimateDeepSeekFlashCost(usage = {}) {
+  const promptTokens = normalizeUsageInteger(usage.prompt_tokens);
+  const completionTokens = normalizeUsageInteger(usage.completion_tokens) || 0;
+  const cacheHitTokens = getDeepSeekUsageInteger(usage, ['prompt_cache_hit_tokens', 'input_cache_hit_tokens']) || 0;
+  const configuredCacheMissTokens = getDeepSeekUsageInteger(usage, ['prompt_cache_miss_tokens', 'input_cache_miss_tokens']);
+  const cacheMissTokens = configuredCacheMissTokens !== null
+    ? configuredCacheMissTokens
+    : Math.max(0, (promptTokens || 0) - cacheHitTokens);
+  const cost = (
+    cacheHitTokens * DEEPSEEK_FLASH_PRICE_RMB_PER_MILLION.inputCacheHit +
+    cacheMissTokens * DEEPSEEK_FLASH_PRICE_RMB_PER_MILLION.inputCacheMiss +
+    completionTokens * DEEPSEEK_FLASH_PRICE_RMB_PER_MILLION.output
+  ) / 1000000;
+  return roundUsageCost(cost);
+}
+
+function normalizeProviderMeta(provider, payload = {}) {
+  const meta = normalizeOpenRouterMeta(payload);
+  if (provider === 'deepseek') {
+    meta.costCredits = estimateDeepSeekFlashCost(payload && payload.usage ? payload.usage : {});
+  }
+  return meta;
+}
+
 function createAiResult(data, meta = {}) {
   return { data, meta };
 }
@@ -503,8 +564,34 @@ async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callOpenRouterJson(config = {}, messages, responseFormat) {
-  if (config.provider !== 'openrouter' && config.provider !== 'opencode') {
+function buildDeepSeekSchemaInstruction(responseFormat) {
+  const jsonSchema = responseFormat && responseFormat.json_schema ? responseFormat.json_schema : null;
+  return [
+    '你必须只输出一个合法 JSON 对象，不要使用 Markdown 代码块。',
+    '输出对象必须满足下面的 JSON Schema。',
+    JSON.stringify(jsonSchema || {}, null, 2),
+  ].join('\n');
+}
+
+function normalizeProviderMessages(provider, messages, responseFormat) {
+  if (provider !== 'deepseek') return messages;
+  return [
+    { role: 'system', content: buildDeepSeekSchemaInstruction(responseFormat) },
+    ...messages,
+  ];
+}
+
+function normalizeProviderResponseFormat(provider, responseFormat) {
+  if (provider === 'deepseek') return { type: 'json_object' };
+  return responseFormat;
+}
+
+function normalizeDeepSeekThinkingMode(value) {
+  return value === 'enabled' ? 'enabled' : 'disabled';
+}
+
+async function callChatCompletionsJson(config = {}, messages, responseFormat) {
+  if (config.provider !== 'openrouter' && config.provider !== 'opencode' && config.provider !== 'deepseek') {
     throw createAiProviderError('AI provider is not supported', 501);
   }
   if (!config.apiKey) {
@@ -526,12 +613,18 @@ async function callOpenRouterJson(config = {}, messages, responseFormat) {
     try {
       const body = {
         model: normalizeProviderModel(config.provider, config.model),
-        messages,
-        response_format: responseFormat,
+        messages: normalizeProviderMessages(config.provider, messages, responseFormat),
+        response_format: normalizeProviderResponseFormat(config.provider, responseFormat),
+        max_tokens: normalizeMaxTokens(config.maxTokens),
       };
       if (config.provider === 'openrouter') {
         body.provider = {
           require_parameters: true,
+        };
+      }
+      if (config.provider === 'deepseek') {
+        body.thinking = {
+          type: normalizeDeepSeekThinkingMode(config.thinkingMode),
         };
       }
       const response = await fetch(normalizeChatCompletionsUrl(config.provider, config.baseUrl), {
@@ -545,10 +638,10 @@ async function callOpenRouterJson(config = {}, messages, responseFormat) {
         throw createAiProviderError(
           payload.error && payload.error.message ? payload.error.message : 'AI provider request failed',
           response.status === 429 ? 429 : 502,
-          normalizeOpenRouterMeta(payload)
+          normalizeProviderMeta(config.provider, payload)
         );
       }
-      const meta = normalizeOpenRouterMeta(payload);
+      const meta = normalizeProviderMeta(config.provider, payload);
       try {
         return createAiResult(parseOpenRouterJson(payload), meta);
       } catch (error) {
@@ -584,7 +677,7 @@ async function generateSessionDraft(config, prompt, profile = {}, options = {}) 
   if (config.provider === 'mock') {
     return createAiResult(normalizeAiSessionDraft(buildMockSessionDraft(prompt, profile, options), profile, options));
   }
-  const result = await callOpenRouterJson(config, [
+  const result = await callChatCompletionsJson(config, [
     { role: 'system', content: buildSystemPrompt() },
     {
       role: 'user',
@@ -611,7 +704,7 @@ async function generateRequestMessage(config, profile = {}, session = {}) {
   if (config.provider === 'mock') {
     return createAiResult(normalizeAiTextOutput(buildMockRequestMessage(profile, session), 200, '我对这个局比较感兴趣，希望能加入。'));
   }
-  const result = await callOpenRouterJson(config, [
+  const result = await callChatCompletionsJson(config, [
     { role: 'system', content: buildSystemPrompt() },
     {
       role: 'user',
@@ -648,7 +741,7 @@ async function generateMatchExplanation(config, profile = {}, session = {}, reas
       '可以结合时间、地点、预算和局主说明判断是否适合你。'
     ));
   }
-  const result = await callOpenRouterJson(config, [
+  const result = await callChatCompletionsJson(config, [
     { role: 'system', content: buildSystemPrompt() },
     {
       role: 'user',
@@ -679,7 +772,7 @@ async function classifyReport(config, input = {}, options = {}) {
   if (config.provider === 'mock') {
     return createAiResult(normalizeAiReportClassification(buildMockReportClassification(input, options), options));
   }
-  const result = await callOpenRouterJson(config, [
+  const result = await callChatCompletionsJson(config, [
     { role: 'system', content: buildSystemPrompt() },
     {
       role: 'user',
@@ -698,7 +791,7 @@ async function generateOpsSummary(config, snapshot = {}) {
   if (config.provider === 'mock') {
     return createAiResult(normalizeAiOpsSummary(buildMockOpsSummary(snapshot), snapshot));
   }
-  const result = await callOpenRouterJson(config, [
+  const result = await callChatCompletionsJson(config, [
     { role: 'system', content: buildSystemPrompt() },
     {
       role: 'user',

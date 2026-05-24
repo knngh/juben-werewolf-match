@@ -5,6 +5,7 @@ const ai = require('../ai');
 const DEFAULT_MODELS = {
   openrouter: 'openrouter/free',
   opencode: 'nemotron-3-super-free',
+  deepseek: 'deepseek-v4-flash',
 };
 
 function parseIntegerEnv(name, fallback, min, max) {
@@ -32,8 +33,8 @@ function buildConfig() {
 
   requireConfig(process.env.AI_ENABLED === 'true', 'AI_ENABLED must be true for AI provider preflight');
   requireConfig(
-    provider === 'openrouter' || provider === 'opencode',
-    'AI_PROVIDER must be openrouter or opencode for AI provider preflight'
+    provider === 'openrouter' || provider === 'opencode' || provider === 'deepseek',
+    'AI_PROVIDER must be openrouter, opencode, or deepseek for AI provider preflight'
   );
   requireConfig(!!apiKey, 'AI_API_KEY is required for AI provider preflight');
 
@@ -46,9 +47,11 @@ function buildConfig() {
     siteUrl: process.env.AI_SITE_URL || '',
     appTitle: process.env.AI_APP_TITLE || 'juben-werewolf-match',
     timeoutMs: parseIntegerEnv('AI_TIMEOUT_MS', 8000, 1000, 60000),
+    maxTokens: parseIntegerEnv('AI_MAX_TOKENS', 600, 1, 4096),
     retryCount: parseIntegerEnv('AI_RETRY_COUNT', 1, 0, 3),
     dailyLimit: parseIntegerEnv('AI_DAILY_LIMIT', 200, 1, 100000),
     dailyCostLimit: parseNumberEnv('AI_DAILY_COST_LIMIT', 0, 0),
+    thinkingMode: process.env.AI_THINKING_MODE || 'disabled',
   };
 }
 

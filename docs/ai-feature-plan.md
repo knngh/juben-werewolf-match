@@ -104,6 +104,8 @@ AI_PROVIDER=
 AI_API_KEY=
 AI_MODEL=
 AI_TIMEOUT_MS=8000
+AI_MAX_TOKENS=600
+AI_THINKING_MODE=disabled
 AI_DAILY_LIMIT=200
 ```
 
@@ -173,7 +175,7 @@ ai_usage_logs
 
 ## 已完成基础层
 
-- 后端环境变量：`AI_ENABLED`、`AI_PROVIDER`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS`、`AI_RETRY_COUNT`、`AI_DAILY_COST_LIMIT`、`AI_DAILY_LIMIT`。
+- 后端环境变量：`AI_ENABLED`、`AI_PROVIDER`、`AI_API_KEY`、`AI_MODEL`、`AI_TIMEOUT_MS`、`AI_MAX_TOKENS`、`AI_THINKING_MODE`、`AI_RETRY_COUNT`、`AI_DAILY_COST_LIMIT`、`AI_DAILY_LIMIT`。
 - AI 用量日志表：`ai_usage_logs`。
 - 能力查询：`GET /api/ai/capabilities`。
 - 能力查询会返回当前用户今日 AI 请求用量、剩余次数、全站今日 cost 用量和剩余成本预算。
@@ -189,6 +191,7 @@ ai_usage_logs
 - OpenRouter 用量元数据：provider request id、tokens 和 cost credits 会写入 `ai_usage_logs`，并在运营摘要中提供聚合统计。
 - 真实供应商预检：`npm run smoke:ai-provider` 可用后端 `.env` 中的 `AI_API_KEY` 做最小结构化联调，输出请求模型、实际路由模型和用量元数据，不打印密钥或生成正文。
 - OpenCode Zen provider：`AI_PROVIDER=opencode` 时走 OpenCode Zen OpenAI-compatible Chat Completions 接口，默认模型 `nemotron-3-super-free`，`AI_BASE_URL` 可填 `https://opencode.ai/zen/v1`。
+- DeepSeek provider：`AI_PROVIDER=deepseek` 时走 DeepSeek OpenAI-compatible Chat Completions 接口，默认模型 `deepseek-v4-flash`；请求使用 JSON Output、默认关闭思考模式并限制输出 token。
 - 临时空响应重试：供应商 HTTP 200 但缺少 `message.content` 时按临时上游异常重试；content 存在但不是合法结构化 JSON 时仍直接失败，避免重复消耗。
 - 成本预算可观测：`GET /api/ai/capabilities` 的 `quota` 字段暴露当天请求和 cost 预算消耗，便于按真实调用校准阈值。
 - AI 输出归一化：发布草稿、留言、匹配解释、举报归类和运营摘要返回前都会走结构化校验。

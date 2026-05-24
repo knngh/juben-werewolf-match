@@ -12,12 +12,14 @@ const AI_GUARD_PORT = 3129;
 const OPENROUTER_PORT = 3130;
 const OPENROUTER_BACKEND_PORT = 3131;
 const AI_COST_GUARD_PORT = 3132;
+const DEEPSEEK_BACKEND_PORT = 3133;
 const BASE = `http://127.0.0.1:${PORT}`;
 const GEO_BASE = `http://127.0.0.1:${GEO_PORT}/search`;
 const AI_GUARD_BASE = `http://127.0.0.1:${AI_GUARD_PORT}`;
 const OPENROUTER_BASE = `http://127.0.0.1:${OPENROUTER_BACKEND_PORT}`;
 const OPENROUTER_API_BASE = `http://127.0.0.1:${OPENROUTER_PORT}/api/v1/chat/completions`;
 const AI_COST_GUARD_BASE = `http://127.0.0.1:${AI_COST_GUARD_PORT}`;
+const DEEPSEEK_BASE = `http://127.0.0.1:${DEEPSEEK_BACKEND_PORT}`;
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jwm-smoke-'));
 const dbPath = path.join(tmpDir, 'data.db');
 
@@ -74,11 +76,19 @@ function startOpenRouterMock() {
         payload.provider.require_parameters === true;
       const isOpenCodeRequest = payload.model === 'nemotron-3-super-free' &&
         payload.provider === undefined;
+      const isDeepSeekRequest = payload.model === 'deepseek-v4-flash' &&
+        payload.provider === undefined &&
+        payload.response_format &&
+        payload.response_format.type === 'json_object' &&
+        payload.thinking &&
+        payload.thinking.type === 'disabled' &&
+        payload.max_tokens === 600 &&
+        JSON.stringify(payload.messages || []).includes('session_draft');
       if (
-        !['Bearer fake-openrouter-key', 'Bearer fake-opencode-key'].includes(req.headers.authorization) ||
-        (!isOpenRouterRequest && !isOpenCodeRequest) ||
+        !['Bearer fake-openrouter-key', 'Bearer fake-opencode-key', 'Bearer fake-deepseek-key'].includes(req.headers.authorization) ||
+        (!isOpenRouterRequest && !isOpenCodeRequest && !isDeepSeekRequest) ||
         !payload.response_format ||
-        payload.response_format.type !== 'json_schema'
+        (!['json_schema', 'json_object'].includes(payload.response_format.type))
       ) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: { message: 'bad openrouter request' } }));
@@ -87,7 +97,9 @@ function startOpenRouterMock() {
 
       const schemaName = payload.response_format && payload.response_format.json_schema
         ? payload.response_format.json_schema.name
-        : '';
+        : isDeepSeekRequest
+          ? 'session_draft'
+          : '';
       const schemaCallCount = calls.filter((item) => {
         const itemFormat = item.payload.response_format || {};
         const itemSchema = itemFormat.json_schema || {};
@@ -155,7 +167,12 @@ function startOpenRouterMock() {
           prompt_tokens: schemaName === 'report_classification' ? 9 : 12,
           completion_tokens: schemaName === 'report_classification' ? 3 : 8,
           total_tokens: schemaName === 'report_classification' ? 12 : 20,
-          cost: 0,
+          ...(isDeepSeekRequest
+            ? {
+                prompt_cache_hit_tokens: 4,
+                prompt_cache_miss_tokens: 8,
+              }
+            : { cost: 0 }),
         },
       }));
     });
@@ -595,6 +612,76 @@ async function runOpenCodeSmoke() {
   }
 }
 
+async function runDeepSeekSmoke() {
+  const deepSeekMock = startOpenRouterMock();
+  const deepSeekDbPath = path.join(tmpDir, 'deepseek-provider.db');
+  await listen(deepSeekMock, OPENROUTER_PORT);
+  const server = startServer({
+    port: DEEPSEEK_BACKEND_PORT,
+    dbPath: deepSeekDbPath,
+    aiProvider: 'deepseek',
+    aiApiKey: 'fake-deepseek-key',
+    aiModel: '',
+    aiBaseUrl: OPENROUTER_API_BASE,
+  });
+  try {
+    await waitForServer(DEEPSEEK_BASE);
+    const user = await requestAt(DEEPSEEK_BASE, 'POST', '/api/register', {
+      nickname: 'DeepSeek 测试',
+      wechat: 'deepseek_smoke',
+      password: '123456',
+    });
+    const capabilities = await requestAt(DEEPSEEK_BASE, 'GET', '/api/ai/capabilities', null, user.data.token);
+    if (
+      capabilities.data.ready !== true ||
+      capabilities.data.provider !== 'deepseek' ||
+      capabilities.data.model !== 'deepseek-v4-flash' ||
+      !capabilities.data.features.sessionDraft
+    ) {
+      throw new Error('DeepSeek provider should expose AI capabilities');
+    }
+    const draft = await requestAt(DEEPSEEK_BASE, 'POST', '/api/ai/session-draft', {
+      prompt: '周五晚上海新手友好桌游',
+    }, user.data.token);
+    const payload = deepSeekMock.calls[0].payload;
+    if (
+      draft.data.provider !== 'deepseek' ||
+      draft.data.model !== 'deepseek-v4-flash' ||
+      draft.data.draft.gameType !== '桌游' ||
+      payload.provider !== undefined ||
+      payload.response_format.type !== 'json_object' ||
+      payload.thinking.type !== 'disabled' ||
+      payload.max_tokens !== 600
+    ) {
+      throw new Error('DeepSeek session draft should use guarded JSON output request shape');
+    }
+    const logDb = new Database(deepSeekDbPath, { readonly: true });
+    try {
+      const log = logDb.prepare(`
+        SELECT feature, output_status, provider_request_id, prompt_tokens, completion_tokens, total_tokens, cost_credits
+        FROM ai_usage_logs
+        WHERE feature = 'sessionDraft'
+      `).get();
+      if (
+        !log ||
+        log.output_status !== 'ok' ||
+        log.provider_request_id !== 'openrouter-smoke-1' ||
+        log.prompt_tokens !== 12 ||
+        log.completion_tokens !== 8 ||
+        log.total_tokens !== 20 ||
+        Math.abs(Number(log.cost_credits) - 0.000024) > 0.000001
+      ) {
+        throw new Error('DeepSeek usage metadata and estimated RMB cost should be logged');
+      }
+    } finally {
+      logDb.close();
+    }
+  } finally {
+    server.kill();
+    deepSeekMock.close();
+  }
+}
+
 async function main() {
   await runAiModuleSmoke();
   const geoMock = startGeoMock();
@@ -603,6 +690,7 @@ async function main() {
   await runAiCostLimitSmoke();
   await runOpenRouterSmoke();
   await runOpenCodeSmoke();
+  await runDeepSeekSmoke();
   const server = startServer();
   try {
     await waitForServer();

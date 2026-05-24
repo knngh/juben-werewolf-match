@@ -22,6 +22,7 @@ const AI_PROVIDER = process.env.AI_PROVIDER || '';
 const AI_API_KEY = process.env.AI_API_KEY || '';
 const AI_MODEL = process.env.AI_MODEL || '';
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 8000;
+const AI_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS) || 600;
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT) || 200;
 const AI_DAILY_COST_LIMIT_VALUE = Number(process.env.AI_DAILY_COST_LIMIT);
 const AI_DAILY_COST_LIMIT = Number.isFinite(AI_DAILY_COST_LIMIT_VALUE)
@@ -34,6 +35,7 @@ const AI_RETRY_COUNT = Number.isInteger(AI_RETRY_COUNT_VALUE)
 const AI_BASE_URL = process.env.AI_BASE_URL || '';
 const AI_SITE_URL = process.env.AI_SITE_URL || '';
 const AI_APP_TITLE = process.env.AI_APP_TITLE || 'juben-werewolf-match';
+const AI_THINKING_MODE = process.env.AI_THINKING_MODE || 'disabled';
 
 app.use(cors());
 app.use(express.json());
@@ -211,12 +213,14 @@ function getAiConfig() {
     apiKey: AI_API_KEY,
     model: AI_MODEL || '',
     timeoutMs: AI_TIMEOUT_MS,
+    maxTokens: AI_MAX_TOKENS,
     dailyLimit: AI_DAILY_LIMIT,
     dailyCostLimit: AI_DAILY_COST_LIMIT,
     retryCount: AI_RETRY_COUNT,
     baseUrl: AI_BASE_URL,
     siteUrl: AI_SITE_URL,
     appTitle: AI_APP_TITLE,
+    thinkingMode: AI_THINKING_MODE,
   };
 }
 
