@@ -1,9 +1,10 @@
-const AI_FEATURE_KEYS = ['sessionDraft', 'requestMessage', 'matchExplanation', 'reportClassification', 'opsSummary'];
+const AI_FEATURE_KEYS = ['sessionDraft', 'requestMessage', 'matchExplanation', 'gameGuide', 'reportClassification', 'opsSummary'];
 const AI_PROVIDER_FEATURES = {
   mock: {
     sessionDraft: true,
     requestMessage: true,
     matchExplanation: true,
+    gameGuide: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -11,6 +12,7 @@ const AI_PROVIDER_FEATURES = {
     sessionDraft: true,
     requestMessage: true,
     matchExplanation: true,
+    gameGuide: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -18,6 +20,7 @@ const AI_PROVIDER_FEATURES = {
     sessionDraft: true,
     requestMessage: true,
     matchExplanation: true,
+    gameGuide: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -25,6 +28,7 @@ const AI_PROVIDER_FEATURES = {
     sessionDraft: true,
     requestMessage: true,
     matchExplanation: true,
+    gameGuide: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -272,6 +276,53 @@ function buildMockMatchExplanation(profile = {}, session = {}, reasons = []) {
   return normalizeText(`${summary}${detailText}建议再确认具体时间和局主说明是否合适。`, 220);
 }
 
+function buildMockGameGuide(session = {}) {
+  const gameType = normalizeText(session.game_type || session.gameType, 20) || '桌游';
+  const guides = {
+    剧本杀: {
+      summary: '先确认时长、难度和是否接受新手，开局前不要提前交换核心剧情。',
+      tips: ['提前 10 分钟到场', '不剧透、不抢话', '有不适内容先和主持人沟通'],
+      checklist: ['确认人数与角色配置', '确认预算是否含主持费', '确认迟到和鸽局规则'],
+    },
+    狼人杀: {
+      summary: '先约定发言顺序和计时规则，保持信息透明，避免把新手压力变成对抗。',
+      tips: ['发言简洁、给出依据', '不把情绪当成证据', '提前说明是否接受复盘'],
+      checklist: ['确认局型与人数', '确认是否有新手教学', '确认是否需要自带设备'],
+    },
+    血染钟楼: {
+      summary: '确认剧本版本、主持人经验和夜间流程，新手局优先选择有教学的组织者。',
+      tips: ['记清自己的信息边界', '尊重私聊与公开讨论节奏', '不擅自补充主持人未公开的信息'],
+      checklist: ['确认主持人和版本', '确认预计时长', '确认是否支持新手'],
+    },
+    跑团: {
+      summary: '先对齐世界观、角色创建和缺席处理方式，长期团比一次性胜负更重要。',
+      tips: ['尊重 GM 的节奏', '角色目标先和队伍对齐', '缺席要提前说明'],
+      checklist: ['确认规则系统', '确认预计时长和频率', '确认线上工具或线下地点'],
+    },
+  };
+  const guide = guides[gameType] || {
+    summary: '先确认人数、时长、预算和新手友好程度，开局前把边界说清楚会更轻松。',
+    tips: ['准时到场', '尊重他人边界', '结束后及时反馈'],
+    checklist: ['确认玩法和人数', '确认地点或线上工具', '确认取消和迟到规则'],
+  };
+  return {
+    gameType,
+    summary: normalizeAiTextOutput(guide.summary, 180),
+    tips: normalizeTags(guide.tips).slice(0, 4),
+    checklist: normalizeTags(guide.checklist).slice(0, 4),
+  };
+}
+
+function normalizeAiGameGuide(guide = {}, session = {}) {
+  const fallback = buildMockGameGuide(session);
+  return {
+    gameType: normalizeAiTextOutput(guide.gameType, 20, fallback.gameType),
+    summary: normalizeAiTextOutput(guide.summary, 180, fallback.summary),
+    tips: Array.isArray(guide.tips) && guide.tips.length ? normalizeTags(guide.tips).slice(0, 4) : fallback.tips,
+    checklist: Array.isArray(guide.checklist) && guide.checklist.length ? normalizeTags(guide.checklist).slice(0, 4) : fallback.checklist,
+  };
+}
+
 function buildMockReportClassification(input = {}, options = {}) {
   const reportReasons = options.reportReasons || [];
   const reason = reportReasons.includes(input.reason) ? input.reason : '';
@@ -456,6 +507,15 @@ function buildOpsSummarySchema() {
       maxItems: 5,
     },
   }, ['summary', 'highlights', 'actions']);
+}
+
+function buildGameGuideSchema() {
+  return buildJsonSchema('game_guide', {
+    gameType: textSchema(20),
+    summary: textSchema(180),
+    tips: { type: 'array', items: textSchema(60), maxItems: 4 },
+    checklist: { type: 'array', items: textSchema(60), maxItems: 4 },
+  }, ['gameType', 'summary', 'tips', 'checklist']);
 }
 
 function buildTextObjectSchema(name, field, maxLength) {
@@ -768,6 +828,28 @@ async function generateMatchExplanation(config, profile = {}, session = {}, reas
   );
 }
 
+async function generateGameGuide(config, session = {}) {
+  if (config.provider === 'mock') {
+    return createAiResult(normalizeAiGameGuide(buildMockGameGuide(session), session));
+  }
+  const result = await callChatCompletionsJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: '给桌游局生成一份简短的新手攻略和开局前检查清单，不涉及剧透，不做安全或报名决策。',
+        session: {
+          title: normalizeText(session.title, 40),
+          gameType: normalizeText(session.game_type, 20),
+          playMode: normalizeText(session.play_mode, 10),
+          note: normalizeText(session.note, 300),
+        },
+      }),
+    },
+  ], buildGameGuideSchema());
+  return createAiResult(normalizeAiGameGuide(result.data, session), result.meta);
+}
+
 async function classifyReport(config, input = {}, options = {}) {
   if (config.provider === 'mock') {
     return createAiResult(normalizeAiReportClassification(buildMockReportClassification(input, options), options));
@@ -818,6 +900,9 @@ module.exports = {
   generateSessionDraft,
   generateRequestMessage,
   generateMatchExplanation,
+  buildMockGameGuide,
+  normalizeAiGameGuide,
+  generateGameGuide,
   classifyReport,
   generateOpsSummary,
 };

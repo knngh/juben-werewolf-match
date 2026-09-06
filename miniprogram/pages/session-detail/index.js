@@ -52,7 +52,9 @@ Page({
     requesting: false,
     aiGeneratingMessage: false,
     aiGeneratingExplanation: false,
+    aiGeneratingGuide: false,
     aiExplanation: '',
+    aiGuide: null,
     session: null,
     isCreator: false,
     hasContact: false,
@@ -60,6 +62,7 @@ Page({
     aiCapabilities: {
       requestMessage: false,
       matchExplanation: false,
+      gameGuide: false,
     },
     requests: [],
     approvedRequests: [],
@@ -105,6 +108,7 @@ Page({
         this.setData({
           'aiCapabilities.requestMessage': !!res.data.features.requestMessage,
           'aiCapabilities.matchExplanation': !!res.data.features.matchExplanation,
+          'aiCapabilities.gameGuide': !!res.data.features.gameGuide,
         });
       }
     });
@@ -128,6 +132,7 @@ Page({
         isCreator,
         hasContact: !!(session.contactNote || (session.creator && session.creator.wechat)),
         aiExplanation: '',
+        aiGuide: null,
       });
       if (isCreator) {
         this.loadRequests();
@@ -202,6 +207,19 @@ Page({
       this.setData({ aiGeneratingExplanation: false });
       if (res.code === 0 && res.data && res.data.explanation) {
         this.setData({ aiExplanation: res.data.explanation });
+      } else {
+        wx.showToast({ title: res.message || 'AI 暂不可用', icon: 'none' });
+      }
+    });
+  },
+
+  generateAiGuide() {
+    if (!this.ensureLogin() || this.data.aiGeneratingGuide) return;
+    this.setData({ aiGeneratingGuide: true });
+    api.post('/api/ai/game-guide', { sessionId: this.data.id }).then((res) => {
+      this.setData({ aiGeneratingGuide: false });
+      if (res.code === 0 && res.data && res.data.guide) {
+        this.setData({ aiGuide: res.data.guide });
       } else {
         wx.showToast({ title: res.message || 'AI 暂不可用', icon: 'none' });
       }

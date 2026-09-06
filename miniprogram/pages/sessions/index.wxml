@@ -61,6 +61,7 @@
       <text class="session-title">{{item.title}}</text>
       <text class="session-meta">{{item.placeText}}</text>
       <text class="session-meta">{{item.playDate}} {{item.playTime}} · {{item.playMode}}{{item.budgetRange ? ' · ' + item.budgetRange : ''}}{{item.distanceText ? ' · ' + item.distanceText : ''}}</text>
+      <view wx:if="{{item.matchScoreText}}" class="match-head"><text class="match-level">{{item.matchLevel}}</text><text class="match-score">{{item.matchScoreText}}</text></view>
       <view wx:if="{{item.matchReasons && item.matchReasons.length}}" class="tag-row reason-row">
         <text wx:for="{{item.matchReasons}}" wx:for-item="reason" wx:key="*this" class="reason">{{reason}}</text>
       </view>

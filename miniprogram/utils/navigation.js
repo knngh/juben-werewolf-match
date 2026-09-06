@@ -1,7 +1,7 @@
 const TAB_PAGES = [
   'pages/sessions/index',
-  'pages/my/index',
-  'pages/notifications/index',
+  'pages/discover/index',
+  'pages/matches/index',
   'pages/profile/index',
 ];
 

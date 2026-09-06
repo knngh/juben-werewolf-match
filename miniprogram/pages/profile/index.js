@@ -254,7 +254,19 @@ Page({
   },
 
   goNotifications() {
-    wx.switchTab({ url: '/pages/notifications/index' });
+    wx.navigateTo({ url: '/pages/notifications/index' });
+  },
+
+  goMySessions() {
+    wx.navigateTo({ url: '/pages/my/index' });
+  },
+
+  goDiscover() {
+    wx.switchTab({ url: '/pages/discover/index' });
+  },
+
+  goMatches() {
+    wx.switchTab({ url: '/pages/matches/index' });
   },
 
   logout() {

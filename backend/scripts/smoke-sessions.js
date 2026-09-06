@@ -979,6 +979,17 @@ async function main() {
     ) {
       throw new Error('AI match explanation should summarize rule-based reasons');
     }
+    const aiGuide = await request('POST', '/api/ai/game-guide', {
+      sessionId,
+    }, joinerToken);
+    if (
+      !aiGuide.data.guide ||
+      !aiGuide.data.guide.summary ||
+      !Array.isArray(aiGuide.data.guide.tips) ||
+      !Array.isArray(aiGuide.data.guide.checklist)
+    ) {
+      throw new Error('AI game guide should return a structured no-spoiler guide');
+    }
     const aiMessage = await request('POST', '/api/ai/request-message', {
       sessionId,
     }, joinerToken);

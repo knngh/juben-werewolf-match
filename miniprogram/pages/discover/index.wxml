@@ -1,0 +1,50 @@
+<view class="page">
+  <view class="toolbar">
+    <view>
+      <text class="title">发现同好</text>
+      <text class="subtitle">按类型、风格、时间和城市推荐</text>
+    </view>
+    <button class="btn btn-secondary btn-small" bindtap="load">刷新</button>
+  </view>
+
+  <view wx:if="{{!loggedIn}}" class="card login-card">
+    <text class="section-title">登录后发现同好</text>
+    <text class="hint">完善偏好后，会优先推荐更适合一起玩的搭子。</text>
+    <button class="btn btn-primary btn-full login-btn" bindtap="goLogin">登录</button>
+  </view>
+
+  <view wx:if="{{loggedIn && needsProfile}}" class="card notice-card">
+    <view>
+      <text class="notice-title">资料越完整，推荐越准</text>
+      <text class="hint">还差：{{missingText}}</text>
+    </view>
+    <button class="btn btn-secondary btn-small" bindtap="goProfile">去完善</button>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading">正在找合适的搭子...</view>
+  <view wx:elif="{{loggedIn && !list.length}}" class="empty">暂时没有新的推荐，完善偏好或稍后再来</view>
+  <view wx:elif="{{list.length}}" class="list">
+    <view wx:for="{{list}}" wx:key="id" class="card person-card">
+      <view class="person-head">
+        <view class="avatar">{{item.initial}}</view>
+        <view class="person-main">
+          <text class="person-name">{{item.nickname}}</text>
+          <text class="person-meta">{{item.city || '城市未填写'}} · {{item.matchLevel}}</text>
+        </view>
+        <text class="score">{{item.matchScore}}%</text>
+      </view>
+      <view wx:if="{{item.matchReasons && item.matchReasons.length}}" class="tag-row reason-row">
+        <text wx:for="{{item.matchReasons}}" wx:for-item="reason" wx:key="*this" class="reason">{{reason}}</text>
+      </view>
+      <view wx:if="{{item.gameTypes && item.gameTypes.length}}" class="tag-row preference-row">
+        <text wx:for="{{item.gameTypes}}" wx:for-item="type" wx:key="*this" class="tag">{{type}}</text>
+      </view>
+      <text wx:if="{{item.intro}}" class="person-intro">{{item.intro}}</text>
+      <view class="action-row">
+        <button class="btn btn-secondary btn-small" data-id="{{item.id}}" bindtap="pass">跳过</button>
+        <button class="btn btn-danger btn-small" data-id="{{item.id}}" data-name="{{item.nickname}}" bindtap="block">拉黑</button>
+        <button class="btn btn-primary btn-small" data-id="{{item.id}}" bindtap="like">喜欢</button>
+      </view>
+    </view>
+  </view>
+</view>

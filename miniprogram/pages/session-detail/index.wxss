@@ -74,6 +74,17 @@
   color: #1f7a4d;
   font-size: 23rpx;
 }
+.match-head { display: flex; align-items: center; justify-content: space-between; margin-top: 16rpx; }
+.match-level { color: #1f7a4d; font-size: 24rpx; font-weight: 700; }
+.match-score { color: #697166; font-size: 23rpx; }
+.guide-entry { display: flex; gap: 16rpx; align-items: center; justify-content: space-between; margin-top: 20rpx; padding: 18rpx; border: 1rpx solid #dbe8dc; border-radius: 12rpx; background: #f7fbf6; }
+.guide-title { display: block; color: #2f3a2f; font-size: 26rpx; font-weight: 700; }
+.guide-subtitle { display: block; margin-top: 6rpx; color: #697166; font-size: 23rpx; }
+.ai-guide { margin-top: 16rpx; padding: 20rpx; border-radius: 12rpx; background: #f2f7ee; }
+.guide-summary { display: block; margin-top: 10rpx; color: #334033; font-size: 25rpx; line-height: 1.55; }
+.guide-label { display: block; margin-top: 16rpx; color: #5d655b; font-size: 23rpx; font-weight: 700; }
+.guide-list { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 10rpx; }
+.guide-item { padding: 8rpx 12rpx; border-radius: 8rpx; background: #ffffff; color: #52604e; font-size: 23rpx; }
 
 .owner-actions {
   display: flex;

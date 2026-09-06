@@ -6,7 +6,9 @@
     "pages/profile/index",
     "pages/login/index",
     "pages/session-detail/index",
-    "pages/notifications/index"
+    "pages/notifications/index",
+    "pages/discover/index",
+    "pages/matches/index"
   ],
   "window": {
     "navigationBarTitleText": "桌游搭子",
@@ -25,12 +27,12 @@
         "text": "找局"
       },
       {
-        "pagePath": "pages/my/index",
-        "text": "我的局"
+        "pagePath": "pages/discover/index",
+        "text": "发现"
       },
       {
-        "pagePath": "pages/notifications/index",
-        "text": "通知"
+        "pagePath": "pages/matches/index",
+        "text": "匹配"
       },
       {
         "pagePath": "pages/profile/index",

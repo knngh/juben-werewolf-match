@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
 const format = require('../../utils/format');
+const recommendation = require('../../utils/recommendation');
 
 Page({
   data: {
@@ -95,7 +96,7 @@ Page({
     return api.get('/api/sessions' + query).then((res) => {
       if (res.code === 0 && Array.isArray(res.data)) {
         this.setData({
-          sessions: res.data.map(format.enrichSession),
+          sessions: res.data.map((item) => format.enrichSession(recommendation.enrichRecommendation(item))),
           loading: false,
         });
       } else {

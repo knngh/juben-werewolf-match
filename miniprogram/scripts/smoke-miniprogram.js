@@ -24,8 +24,8 @@ assert(Array.isArray(appJson.tabBar && appJson.tabBar.list), 'tabBar 配置缺�
 const tabPages = new Set(appJson.tabBar.list.map((item) => item.pagePath));
 [
   'pages/sessions/index',
-  'pages/my/index',
-  'pages/notifications/index',
+  'pages/discover/index',
+  'pages/matches/index',
   'pages/profile/index',
 ].forEach((page) => assert(tabPages.has(page), `tabBar 缺少 ${page}`));
 
@@ -37,6 +37,8 @@ const tabPages = new Set(appJson.tabBar.list.map((item) => item.pagePath));
   'pages/my/index',
   'pages/profile/index',
   'pages/notifications/index',
+  'pages/discover/index',
+  'pages/matches/index',
 ].forEach((page) => {
   assert(appJson.pages.includes(page), `app.json 未注册 ${page}`);
   ['.js', '.json', '.wxml', '.wxss'].forEach((ext) => {
@@ -67,11 +69,20 @@ assert(sessionDetailSource.includes('wx.setClipboardData'), '局详情页应支�
 assert(sessionDetailSource.includes('wx.showShareMenu'), '局详情页应显式启用分享菜单');
 assert(sessionDetailSource.includes('/api/ai/request-message'), '局详情页应接入 AI 申请留言接口');
 assert(sessionDetailSource.includes('/api/ai/match-explanation'), '局详情页应接入 AI 匹配理由解释接口');
+assert(sessionDetailSource.includes('/api/ai/game-guide'), '局详情页应接入 AI 玩法攻略接口');
 assert(sessionDetailSource.includes('matchExplanation'), '局详情页应按后端能力显示 AI 匹配解释');
+assert(sessionDetailSource.includes('gameGuide'), '局详情页应按后端能力显示 AI 玩法攻略');
 
 const sessionsSource = fs.readFileSync(path.join(root, 'pages/sessions/index.js'), 'utf8');
 assert(sessionsSource.includes('onShareAppMessage'), '找局页应支持分享');
 assert(sessionsSource.includes('wx.showShareMenu'), '找局页应显式启用分享菜单');
+
+const discoverSource = fs.readFileSync(path.join(root, 'pages/discover/index.js'), 'utf8');
+assert(discoverSource.includes('/api/discover'), '发现页应接入推荐用户接口');
+assert(discoverSource.includes('/api/like/'), '发现页应支持喜欢操作');
+
+const matchesSource = fs.readFileSync(path.join(root, 'pages/matches/index.js'), 'utf8');
+assert(matchesSource.includes('/api/matches'), '匹配页应接入互相喜欢列表接口');
 
 const profileSource = fs.readFileSync(path.join(root, 'pages/profile/index.js'), 'utf8');
 assert(profileSource.includes('/api/notification-preferences'), '资料页应接入通知偏好 API');

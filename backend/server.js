@@ -60,6 +60,8 @@ const AI_OPTIONS = {
   excludedGameTypes: EXCLUDED_GAME_TYPES,
   reportReasons: REPORT_REASONS,
 };
+const SESSION_MATCH_SCORE_MAX = 19;
+const PROFILE_MATCH_SCORE_MAX = 21;
 
 app.get('/api/options', (req, res) => {
   res.json({
@@ -706,43 +708,66 @@ function overlapCount(left = [], right = []) {
   return left.filter((item) => rightSet.has(item)).length;
 }
 
-function playerCountFits(range, maxPlayers) {
+function normalizeMatchCity(value) {
+  return String(value || '').trim().replace(/市$/, '');
+}
+
+function playerCountFits(range, minPlayers, maxPlayers) {
   if (!range || range === '都可以') return false;
-  if (range === '2-4人') return maxPlayers >= 2 && maxPlayers <= 4;
-  if (range === '5-8人') return maxPlayers >= 5 && maxPlayers <= 8;
+  if (range === '2-4人') return minPlayers <= 4 && maxPlayers >= 2;
+  if (range === '5-8人') return minPlayers <= 8 && maxPlayers >= 5;
   if (range === '9人以上') return maxPlayers >= 9;
   return false;
+}
+
+function availabilityMatches(availability = [], playDate, playTime) {
+  if (!playDate || !availability.length) return false;
+  if (availability.includes('时间灵活')) return true;
+  const date = new Date(`${playDate}T${playTime || '19:00'}:00`);
+  if (Number.isNaN(date.getTime())) return false;
+  const day = date.getDay();
+  const hour = date.getHours();
+  const isWeekend = day === 0 || day === 6;
+  const isFriday = day === 5;
+  return availability.some((item) => {
+    if (item === '周五晚') return isFriday && hour >= 17;
+    if (item === '周末白天') return isWeekend && hour < 18;
+    if (item === '周末晚上') return isWeekend && hour >= 18;
+    if (item === '工作日晚') return !isWeekend && hour >= 18;
+    if (item === '节假日') return isWeekend;
+    return false;
+  });
 }
 
 function scoreProfileMatch(candidate, viewerProfile) {
   let score = 0;
   const reasons = [];
 
-  const sharedGames = overlapCount(candidate.gameTypes, viewerProfile.gameTypes);
+  const sharedGames = Math.min(2, overlapCount(candidate.gameTypes, viewerProfile.gameTypes));
   if (sharedGames) {
     score += sharedGames * 3;
     reasons.push('常玩类型相近');
   }
 
-  const sharedStyles = overlapCount(candidate.playStyles, viewerProfile.playStyles);
+  const sharedStyles = Math.min(2, overlapCount(candidate.playStyles, viewerProfile.playStyles));
   if (sharedStyles) {
     score += sharedStyles * 2;
     reasons.push('风格相近');
   }
 
-  const sharedAvailability = overlapCount(candidate.availability, viewerProfile.availability);
+  const sharedAvailability = Math.min(2, overlapCount(candidate.availability, viewerProfile.availability));
   if (sharedAvailability) {
     score += sharedAvailability * 2;
     reasons.push('时间匹配');
   }
 
-  const sharedModes = overlapCount(candidate.playModes, viewerProfile.playModes);
+  const sharedModes = Math.min(2, overlapCount(candidate.playModes, viewerProfile.playModes));
   if (sharedModes) {
     score += sharedModes;
     reasons.push('玩法偏好一致');
   }
 
-  if (candidate.city && viewerProfile.city && candidate.city === viewerProfile.city) {
+  if (candidate.city && viewerProfile.city && normalizeMatchCity(candidate.city) === normalizeMatchCity(viewerProfile.city)) {
     score += 3;
     reasons.push('同城');
   }
@@ -759,14 +784,18 @@ function scoreProfileMatch(candidate, viewerProfile) {
     reasons.push('人数偏好一致');
   }
 
-  return { score, reasons: reasons.slice(0, 4) };
+  return {
+    score,
+    matchScore: Math.min(100, Math.round((score / PROFILE_MATCH_SCORE_MAX) * 100)),
+    reasons: reasons.slice(0, 4),
+  };
 }
 
 function scoreSessionMatch(row, viewerProfile) {
   let score = 0;
   const reasons = [];
 
-  if (viewerProfile.city && row.city === viewerProfile.city) {
+  if (viewerProfile.city && normalizeMatchCity(row.city) === normalizeMatchCity(viewerProfile.city)) {
     score += 4;
     reasons.push('同城');
   }
@@ -782,9 +811,13 @@ function scoreSessionMatch(row, viewerProfile) {
     score += 2;
     reasons.push('玩法偏好');
   }
-  if (playerCountFits(viewerProfile.playerCountRange, row.max_players)) {
+  if (playerCountFits(viewerProfile.playerCountRange, row.min_players, row.max_players)) {
     score += 1;
     reasons.push('人数合适');
+  }
+  if (availabilityMatches(viewerProfile.availability, row.play_date, row.play_time)) {
+    score += 2;
+    reasons.push('时间匹配');
   }
   if (typeof row._distanceKm === 'number') {
     if (row._distanceKm <= 5) {
@@ -801,7 +834,11 @@ function scoreSessionMatch(row, viewerProfile) {
     reasons.push('时间临近');
   }
 
-  return { score, reasons: reasons.slice(0, 4) };
+  return {
+    score,
+    matchScore: Math.min(100, Math.round((score / SESSION_MATCH_SCORE_MAX) * 100)),
+    reasons: reasons.slice(0, 4),
+  };
 }
 
 function getSessionRow(sessionId) {
@@ -824,7 +861,7 @@ function getRequestStatus(sessionId, userId) {
   return request ? request.status : null;
 }
 
-function serializeSession(row, viewerId, detail = false, matchReasons = []) {
+function serializeSession(row, viewerId, detail = false, matchReasons = [], matchScore = null) {
   const requestStatus = getRequestStatus(row.id, viewerId);
   const isCreator = viewerId && row.creator_user_id === viewerId;
   const isApproved = requestStatus === 'approved';
@@ -870,6 +907,10 @@ function serializeSession(row, viewerId, detail = false, matchReasons = []) {
       seatsLeft > 0
     ),
     matchReasons,
+    ...(typeof matchScore === 'number' ? {
+      matchScore,
+      matchLevel: matchScore >= 70 ? '高度匹配' : matchScore >= 40 ? '比较合适' : matchScore > 0 ? '有共同偏好' : '待完善偏好',
+    } : {}),
     ...(typeof row._distanceKm === 'number' ? { distanceKm: row._distanceKm } : {}),
     ...(isCreator ? { requestCounts: getRequestCounts(row.id) } : {}),
     createdAt: row.created_at,
@@ -1221,6 +1262,33 @@ app.post(
 );
 
 app.post(
+  '/api/ai/game-guide',
+  requireAuth,
+  [body('sessionId').isInt({ min: 1 }).withMessage('请选择要查看攻略的局')],
+  async (req, res) => {
+    if (!requireValidation(req, res)) return;
+    if (!requireAiReady(res, 'gameGuide')) return;
+    if (!requireAiQuota(res, req.userId)) return;
+    const sessionId = Number(req.body.sessionId);
+    const startedAt = Date.now();
+    const input = { sessionId };
+    try {
+      const session = getSessionRow(sessionId);
+      if (!session) {
+        logAiUsage({ userId: req.userId, feature: 'gameGuide', input, outputStatus: 'not_found', startedAt });
+        return res.status(404).json({ code: 404, message: '游戏局不存在' });
+      }
+      const result = await ai.generateGameGuide(getAiConfig(), session);
+      logAiUsage({ userId: req.userId, feature: 'gameGuide', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      res.json({ code: 0, data: { guide: result.data, provider: AI_PROVIDER, model: getAiModel() } });
+    } catch (error) {
+      logAiUsage({ userId: req.userId, feature: 'gameGuide', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      sendAiError(res, error, '生成玩法攻略失败');
+    }
+  }
+);
+
+app.post(
   '/api/ai/report-classification',
   requireAuth,
   [
@@ -1323,6 +1391,8 @@ app.get('/api/discover', requireAuth, (req, res) => {
       city: u.city || '',
       ...candidate,
       matchReasons: match.reasons,
+      matchScore: match.matchScore,
+      matchLevel: match.matchScore >= 70 ? '高度匹配' : match.matchScore >= 40 ? '比较合适' : match.matchScore > 0 ? '有共同偏好' : '待完善偏好',
       _score: match.score,
     };
   });
@@ -1477,7 +1547,7 @@ app.get('/api/sessions', (req, res) => {
     .map((row) => {
     const match = viewerProfile ? scoreSessionMatch(row, viewerProfile) : { score: 0, reasons: [] };
     return {
-      ...serializeSession(row, req.userId, false, match.reasons),
+      ...serializeSession(row, req.userId, false, match.reasons, match.matchScore),
       _score: match.score,
     };
   });
@@ -1731,8 +1801,8 @@ app.get('/api/sessions/:id', (req, res) => {
   const viewerProfile = req.userId
     ? serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId))
     : null;
-  const match = viewerProfile ? scoreSessionMatch(row, viewerProfile) : { reasons: [] };
-  res.json({ code: 0, data: serializeSession(row, req.userId, true, match.reasons) });
+  const match = viewerProfile ? scoreSessionMatch(row, viewerProfile) : { reasons: [], matchScore: null };
+  res.json({ code: 0, data: serializeSession(row, req.userId, true, match.reasons, match.matchScore) });
 });
 
 // 创建者关闭/取消游戏局

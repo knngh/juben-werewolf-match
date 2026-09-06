@@ -1,0 +1,15 @@
+.login-card { margin-top: 30rpx; }
+.login-btn { margin-top: 20rpx; }
+.notice-card { display: flex; gap: 18rpx; align-items: center; justify-content: space-between; }
+.notice-title { display: block; color: #2f3a2f; font-size: 28rpx; font-weight: 700; }
+.person-card { margin-top: 0; }
+.person-head { display: flex; gap: 16rpx; align-items: center; }
+.avatar { width: 76rpx; height: 76rpx; flex-shrink: 0; border-radius: 50%; background: #dceee1; color: #1f7a4d; display: flex; align-items: center; justify-content: center; font-size: 34rpx; font-weight: 700; }
+.person-main { flex: 1; min-width: 0; }
+.person-name { display: block; color: #172019; font-size: 32rpx; font-weight: 700; }
+.person-meta, .person-intro { display: block; margin-top: 8rpx; color: #697166; font-size: 24rpx; line-height: 1.5; }
+.score { color: #1f7a4d; font-size: 28rpx; font-weight: 700; }
+.reason-row, .preference-row { margin-top: 16rpx; }
+.reason { display: inline-flex; min-height: 48rpx; align-items: center; padding: 0 16rpx; border-radius: 999rpx; background: #eaf5ef; color: #1f7a4d; font-size: 23rpx; }
+.action-row { display: flex; gap: 12rpx; margin-top: 18rpx; }
+.action-row .btn { flex: 1; }

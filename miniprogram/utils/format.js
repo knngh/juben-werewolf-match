@@ -40,8 +40,15 @@ function enrichSession(item) {
     session.budgetRange,
   ].filter(Boolean).join(' · ');
   session.seatText = (session.currentPlayers || 0) + '/' + (session.maxPlayers || 0) + ' 人';
+  session.matchReasonsText = Array.isArray(session.matchReasons) ? session.matchReasons.slice(0, 4).join('、') : '';
+  session.matchSummary = session.matchReasonsText ? '因为' + session.matchReasonsText : '';
+  if (session.matchScore !== undefined && session.matchScore !== null) {
+    const score = Number(session.matchScore);
+    session.matchScoreText = Number.isFinite(score) ? Math.round(score) + '% 匹配' : '';
+  }
   if (session.distanceKm !== undefined) {
-    session.distanceText = session.distanceKm + 'km';
+    const distance = Number(session.distanceKm);
+    session.distanceText = Number.isFinite(distance) ? (distance < 10 ? distance.toFixed(1) : Math.round(distance)) + 'km' : '';
   }
   return session;
 }

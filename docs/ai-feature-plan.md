@@ -161,7 +161,8 @@ ai_usage_logs
 4. 做 `POST /api/ai/request-message`。（后端 mock 已完成）
 5. 小程序局详情申请区增加“帮我写留言”按钮。（已完成）
 6. 做匹配解释，先把规则理由转成可降级短说明。（mock 已完成）
-7. 做举报归类和运营摘要，先用 mock 输出复核建议。（mock 已完成）
+7. 做玩法攻略，先按游戏类型输出无剧透小贴士和开局前检查清单。（mock 已完成）
+8. 做举报归类和运营摘要，先用 mock 输出复核建议。（mock 已完成）
 
 ## 风险
 
@@ -194,7 +195,7 @@ ai_usage_logs
 - DeepSeek provider：`AI_PROVIDER=deepseek` 时走 DeepSeek OpenAI-compatible Chat Completions 接口，默认模型 `deepseek-v4-flash`；请求使用 JSON Output、默认关闭思考模式并限制输出 token。
 - 临时空响应重试：供应商 HTTP 200 但缺少 `message.content` 时按临时上游异常重试；content 存在但不是合法结构化 JSON 时仍直接失败，避免重复消耗。
 - 成本预算可观测：`GET /api/ai/capabilities` 的 `quota` 字段暴露当天请求和 cost 预算消耗，便于按真实调用校准阈值。
-- AI 输出归一化：发布草稿、留言、匹配解释、举报归类和运营摘要返回前都会走结构化校验。
+- AI 输出归一化：发布草稿、留言、匹配解释、玩法攻略、举报归类和运营摘要返回前都会走结构化校验。
 - smoke 覆盖 mock 发布草稿、申请留言、匹配解释、举报归类、运营摘要、未实现 provider guard、OpenRouter fake provider、临时失败重试、成本预算拦截、用量记录和结构化异常。
 
 小程序 UI 已接入：
@@ -202,6 +203,7 @@ ai_usage_logs
 - 发布页增加“AI 帮我填”。
 - 申请区增加“AI 帮我写留言”。
 - 局详情增加“AI 解读匹配理由”。
+- 局详情增加“AI 玩法攻略”，失败时不影响申请和查看局详情。
 - 根据 `GET /api/ai/capabilities` 决定是否显示按钮。
 
 下一步是真实模型供应商完善：

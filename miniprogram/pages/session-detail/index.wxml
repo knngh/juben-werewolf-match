@@ -11,12 +11,26 @@
       <text class="detail-meta">{{session.placeText}}</text>
       <text class="detail-meta">{{session.playDate}} {{session.playTime}} · {{session.playMode}}{{session.budgetRange ? ' · ' + session.budgetRange : ''}}</text>
       <text class="detail-meta">{{session.currentPlayers}}/{{session.maxPlayers}} 人，剩余 {{session.seatsLeft}} 位</text>
+      <view wx:if="{{session.matchScoreText}}" class="match-head"><text class="match-level">{{session.matchLevel}}</text><text class="match-score">{{session.matchScoreText}}</text></view>
 
       <view wx:if="{{session.matchReasons && session.matchReasons.length}}" class="tag-row reason-row">
         <text wx:for="{{session.matchReasons}}" wx:for-item="reason" wx:key="*this" class="reason">{{reason}}</text>
       </view>
       <button wx:if="{{!isCreator && aiCapabilities.matchExplanation && session.matchReasons && session.matchReasons.length}}" class="btn btn-secondary btn-small ai-explain-btn" loading="{{aiGeneratingExplanation}}" bindtap="generateAiMatchExplanation">AI 解读匹配理由</button>
       <text wx:if="{{aiExplanation}}" class="ai-explanation">{{aiExplanation}}</text>
+
+      <view wx:if="{{!isCreator && aiCapabilities.gameGuide}}" class="guide-entry">
+        <view><text class="guide-title">想更快融入这局？</text><text class="guide-subtitle">AI 根据玩法整理一份无剧透攻略</text></view>
+        <button class="btn btn-secondary btn-small" loading="{{aiGeneratingGuide}}" bindtap="generateAiGuide">看攻略</button>
+      </view>
+      <view wx:if="{{aiGuide}}" class="ai-guide">
+        <text class="guide-title">{{aiGuide.gameType}} 开局攻略</text>
+        <text class="guide-summary">{{aiGuide.summary}}</text>
+        <text class="guide-label">小贴士</text>
+        <view class="guide-list"><text wx:for="{{aiGuide.tips}}" wx:for-item="tip" wx:key="*this" class="guide-item">{{tip}}</text></view>
+        <text class="guide-label">开局前确认</text>
+        <view class="guide-list"><text wx:for="{{aiGuide.checklist}}" wx:for-item="check" wx:key="*this" class="guide-item">{{check}}</text></view>
+      </view>
 
       <view wx:if="{{session.tags && session.tags.length}}" class="tag-row tag-block">
         <text wx:for="{{session.tags}}" wx:for-item="tag" wx:key="*this" class="tag">{{tag}}</text>
