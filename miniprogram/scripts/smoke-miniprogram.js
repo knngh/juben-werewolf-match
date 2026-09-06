@@ -20,6 +20,7 @@ const projectConfig = readJson('project.config.json');
 assert(Array.isArray(appJson.pages) && appJson.pages.length > 0, 'app.json pages 不能为空');
 assert(appJson.pages[0] === 'pages/scripts/index', '首屏应为智能选本页');
 assert(appJson.pages.length === 7, 'MVP 首发页面应包含选本、工具、档案、测试、详情、我的和登录');
+assert(!appJson.permission, 'MVP 首发不应申请线下定位权限');
 assert(Array.isArray(appJson.tabBar && appJson.tabBar.list), 'tabBar 配置缺失');
 
 const tabPages = new Set(appJson.tabBar.list.map((item) => item.pagePath));

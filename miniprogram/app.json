@@ -9,7 +9,7 @@
     "pages/login/index"
   ],
   "window": {
-    "navigationBarTitleText": "桌游搭子",
+    "navigationBarTitleText": "智能选本",
     "navigationBarBackgroundColor": "#f7f8f4",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#f7f8f4"
@@ -29,11 +29,6 @@
         "text": "我的"
       }
     ]
-  },
-  "permission": {
-    "scope.userLocation": {
-      "desc": "用于按距离筛选附近桌游局"
-    }
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json"
