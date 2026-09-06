@@ -813,6 +813,37 @@ async function main() {
     if (!afterRestore.data.some((item) => item.id === firstScriptId)) {
       throw new Error('Restored script should return to recommendation list');
     }
+    const playRecord = await request('POST', '/api/play-records', {
+      scriptId: firstScriptId,
+      role: '侦探',
+      rating: 5,
+      note: '节奏很稳，复盘时线索很有意思。',
+      playedAt: '2026-09-01',
+    }, creatorToken);
+    if (
+      !playRecord.data.record ||
+      playRecord.data.record.scriptId !== firstScriptId ||
+      playRecord.data.record.rating !== 5 ||
+      playRecord.data.summary.total !== 1
+    ) {
+      throw new Error('Play record should persist structured result and summary');
+    }
+    const note = await request('POST', `/api/scripts/${firstScriptId}/notes`, {
+      category: '疑点',
+      title: '时间线',
+      content: '第二幕出现的时间差需要回看。',
+    }, creatorToken);
+    if (!note.data.id) {
+      throw new Error('Script note should persist');
+    }
+    const notes = await request('GET', `/api/scripts/${firstScriptId}/notes`, null, creatorToken);
+    if (!notes.data.length || notes.data[0].category !== '疑点') {
+      throw new Error('Script notes should return structured notes');
+    }
+    const records = await request('GET', '/api/play-records', null, creatorToken);
+    if (records.data.summary.total !== 1 || records.data.records[0].scriptTitle === '') {
+      throw new Error('Play records should return archive summary and script title');
+    }
     const aiDraft = await request('POST', '/api/ai/session-draft', {
       prompt: '周五晚上海静安新手友好狼人杀，最好准时不鸽',
     }, creatorToken);

@@ -64,6 +64,7 @@ const AI_OPTIONS = {
 const SESSION_MATCH_SCORE_MAX = 19;
 const PROFILE_MATCH_SCORE_MAX = 21;
 const SCRIPT_ACTIONS = ['view', 'save', 'unsave', 'dismiss', 'restore'];
+const NOTE_CATEGORIES = ['人物关系', '线索卡', '疑点', '时间线'];
 const TASTE_TEST_QUESTIONS = [
   {
     key: 'experience',
@@ -266,6 +267,120 @@ app.post('/api/taste-profile', requireAuth, [
     WHERE user_id = ?
   `).run(JSON.stringify(profile), req.userId);
   res.json({ code: 0, data: { profile, completedAt: new Date().toISOString() }, message: '口味画像已保存' });
+});
+
+function serializePlayRecord(row = {}) {
+  return {
+    id: row.id,
+    scriptId: row.script_id,
+    scriptTitle: row.script_title || '',
+    gameType: row.game_type || '',
+    role: row.role || '',
+    rating: row.rating === null || row.rating === undefined ? null : Number(row.rating),
+    note: row.note || '',
+    playedAt: row.played_at || '',
+    createdAt: row.created_at || '',
+  };
+}
+
+function getPlayRecordSummary(userId) {
+  const total = db.prepare('SELECT COUNT(*) AS count FROM play_records WHERE user_id = ?').get(userId).count || 0;
+  const rated = db.prepare('SELECT COUNT(*) AS count, AVG(rating) AS average FROM play_records WHERE user_id = ? AND rating IS NOT NULL').get(userId);
+  const types = db.prepare(`
+    SELECT s.game_type AS gameType, COUNT(*) AS count
+    FROM play_records r JOIN scripts s ON s.id = r.script_id
+    WHERE r.user_id = ?
+    GROUP BY s.game_type ORDER BY count DESC, gameType ASC
+  `).all(userId).map((item) => ({ gameType: item.gameType, count: item.count }));
+  return {
+    total,
+    ratedCount: rated.count || 0,
+    averageRating: rated.average ? Math.round(Number(rated.average) * 10) / 10 : 0,
+    typeCounts: types,
+  };
+}
+
+app.get('/api/play-records', requireAuth, (req, res) => {
+  const rows = db.prepare(`
+    SELECT r.*, s.title AS script_title, s.game_type
+    FROM play_records r JOIN scripts s ON s.id = r.script_id
+    WHERE r.user_id = ?
+    ORDER BY r.played_at DESC, r.id DESC
+    LIMIT 100
+  `).all(req.userId);
+  res.json({
+    code: 0,
+    data: {
+      records: rows.map(serializePlayRecord),
+      summary: getPlayRecordSummary(req.userId),
+    },
+  });
+});
+
+app.post('/api/play-records', requireAuth, [
+  body('scriptId').isInt({ min: 1 }).withMessage('请选择剧本'),
+  body('role').optional({ checkFalsy: true }).trim().isLength({ max: 80 }).withMessage('角色最多 80 字'),
+  body('rating').optional({ checkFalsy: true }).isInt({ min: 1, max: 5 }).withMessage('评分应为 1-5 分'),
+  body('note').optional({ checkFalsy: true }).trim().isLength({ max: 500 }).withMessage('短评最多 500 字'),
+  body('playedAt').optional({ checkFalsy: true }).isISO8601({ strict: false }).withMessage('打本日期格式无效'),
+], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const scriptId = Number(req.body.scriptId);
+  if (!db.prepare('SELECT id FROM scripts WHERE id = ?').get(scriptId)) {
+    return res.status(404).json({ code: 404, message: '剧本不存在' });
+  }
+  const playedAt = normalizeText(req.body.playedAt, 20) || new Date().toISOString().slice(0, 10);
+  const result = db.prepare(`
+    INSERT INTO play_records (user_id, script_id, role, rating, note, played_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    req.userId,
+    scriptId,
+    normalizeText(req.body.role, 80),
+    req.body.rating ? Number(req.body.rating) : null,
+    normalizeText(req.body.note, 500),
+    playedAt.slice(0, 10)
+  );
+  const row = db.prepare(`
+    SELECT r.*, s.title AS script_title, s.game_type
+    FROM play_records r JOIN scripts s ON s.id = r.script_id WHERE r.id = ?
+  `).get(result.lastInsertRowid);
+  res.json({ code: 0, data: { record: serializePlayRecord(row), summary: getPlayRecordSummary(req.userId) }, message: '打本记录已保存' });
+});
+
+app.get('/api/scripts/:id/notes', requireAuth, (req, res) => {
+  const scriptId = Number(req.params.id);
+  if (!Number.isInteger(scriptId) || scriptId < 1) return res.status(400).json({ code: 400, message: '无效剧本' });
+  if (!db.prepare('SELECT id FROM scripts WHERE id = ?').get(scriptId)) return res.status(404).json({ code: 404, message: '剧本不存在' });
+  const rows = db.prepare(`
+    SELECT id, script_id, category, title, content, created_at, updated_at
+    FROM script_notes WHERE user_id = ? AND script_id = ? ORDER BY created_at DESC, id DESC LIMIT 100
+  `).all(req.userId, scriptId);
+  res.json({ code: 0, data: rows.map((row) => ({
+    id: row.id,
+    scriptId: row.script_id,
+    category: row.category,
+    title: row.title || '',
+    content: row.content,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  })) });
+});
+
+app.post('/api/scripts/:id/notes', requireAuth, [
+  body('category').isIn(NOTE_CATEGORIES).withMessage('笔记分类无效'),
+  body('title').optional({ checkFalsy: true }).trim().isLength({ max: 80 }).withMessage('笔记标题最多 80 字'),
+  body('content').trim().isLength({ min: 1, max: 1000 }).withMessage('笔记内容应为 1-1000 字'),
+], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const scriptId = Number(req.params.id);
+  if (!Number.isInteger(scriptId) || scriptId < 1) return res.status(400).json({ code: 400, message: '无效剧本' });
+  if (!db.prepare('SELECT id FROM scripts WHERE id = ?').get(scriptId)) return res.status(404).json({ code: 404, message: '剧本不存在' });
+  const result = db.prepare(`
+    INSERT INTO script_notes (user_id, script_id, category, title, content)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(req.userId, scriptId, req.body.category, normalizeText(req.body.title, 80), normalizeText(req.body.content, 1000));
+  res.json({ code: 0, data: { id: result.lastInsertRowid }, message: '笔记已保存' });
 });
 
 app.get('/api/health', (req, res) => {

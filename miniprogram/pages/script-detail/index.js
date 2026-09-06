@@ -103,6 +103,11 @@ Page({
     });
   },
 
+  startPlaying() {
+    if (!this.requireLogin()) return;
+    wx.navigateTo({ url: '/pages/tools/index?id=' + this.data.scriptId });
+  },
+
   onShareAppMessage() {
     const script = this.data.script || {};
     return {

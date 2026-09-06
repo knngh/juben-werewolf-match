@@ -19,7 +19,7 @@ const projectConfig = readJson('project.config.json');
 
 assert(Array.isArray(appJson.pages) && appJson.pages.length > 0, 'app.json pages 不能为空');
 assert(appJson.pages[0] === 'pages/scripts/index', '首屏应为智能选本页');
-assert(appJson.pages.length === 5, 'MVP 首发页面应只保留选本、测试、详情、我的和登录');
+assert(appJson.pages.length === 7, 'MVP 首发页面应包含选本、工具、档案、测试、详情、我的和登录');
 assert(Array.isArray(appJson.tabBar && appJson.tabBar.list), 'tabBar 配置缺失');
 
 const tabPages = new Set(appJson.tabBar.list.map((item) => item.pagePath));
@@ -35,6 +35,8 @@ assert(!tabPages.has('pages/discover/index'), '发现不应出现在 MVP 底部�
   'pages/scripts/index',
   'pages/taste-test/index',
   'pages/script-detail/index',
+  'pages/tools/index',
+  'pages/archive/index',
   'pages/profile/index',
 ].forEach((page) => {
   assert(appJson.pages.includes(page), `app.json 未注册 ${page}`);
@@ -89,6 +91,15 @@ const scriptDetailSource = fs.readFileSync(path.join(root, 'pages/script-detail/
 assert(scriptDetailSource.includes('/api/scripts/'), '剧本详情页应接入详情接口');
 assert(scriptDetailSource.includes('/api/ai/script-explanation'), '剧本详情页应接入 AI 推荐解释');
 assert(scriptDetailSource.includes('loginUrlWithRedirect'), '剧本详情页未登录互动应带回跳地址');
+assert(scriptDetailSource.includes('/pages/tools/index?id='), '剧本详情页应能进入打本工具');
+
+const toolsSource = fs.readFileSync(path.join(root, 'pages/tools/index.js'), 'utf8');
+assert(toolsSource.includes('/api/play-records'), '打本工具应接入打卡记录接口');
+assert(toolsSource.includes('/api/scripts/' + "' + this.data.scriptId + '" + '/notes'), '打本工具应接入结构化笔记接口');
+assert(toolsSource.includes('setInterval'), '打本工具应支持分幕计时');
+
+const archiveSource = fs.readFileSync(path.join(root, 'pages/archive/index.js'), 'utf8');
+assert(archiveSource.includes('/api/play-records'), '档案页应接入打本记录接口');
 
 const discoverSource = fs.readFileSync(path.join(root, 'pages/discover/index.js'), 'utf8');
 assert(discoverSource.includes('/api/discover'), '发现页应接入推荐用户接口');

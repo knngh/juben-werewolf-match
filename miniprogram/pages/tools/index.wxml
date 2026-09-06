@@ -1,0 +1,68 @@
+<view class="page tools-page">
+  <view wx:if="{{loading}}" class="loading">正在准备打本工具...</view>
+  <view wx:elif="{{selectedScript}}">
+    <view class="tool-header">
+      <view>
+        <text class="eyebrow">PLAY SESSION</text>
+        <text class="tool-title">{{selectedScript.title}}</text>
+        <text class="tool-meta">{{selectedScript.gameType}} · {{selectedScript.difficulty}} · {{selectedScript.durationMin}} 分钟</text>
+      </view>
+      <picker range="{{scripts}}" range-key="title" bindchange="onScriptPickerChange">
+        <button class="switch-script">换一本</button>
+      </picker>
+    </view>
+
+    <view class="tool-tabs">
+      <button class="tool-tab {{activeTab === 'timer' ? 'tool-tab-active' : ''}}" data-tab="timer" bindtap="switchTab">计时器</button>
+      <button class="tool-tab {{activeTab === 'notes' ? 'tool-tab-active' : ''}}" data-tab="notes" bindtap="switchTab">打本笔记</button>
+      <button class="tool-tab {{activeTab === 'record' ? 'tool-tab-active' : ''}}" data-tab="record" bindtap="switchTab">打卡记录</button>
+    </view>
+
+    <view wx:if="{{activeTab === 'timer'}}" class="tool-panel">
+      <view class="timer-card">
+        <view class="timer-caption"><text>当前分幕</text><text>{{currentSegmentLabel}}</text></view>
+        <text class="timer-text">{{timerText}}</text>
+        <text class="timer-hint">适合 DM 控节奏，也适合玩家自用</text>
+        <view class="timer-actions">
+          <button class="btn btn-primary timer-main" bindtap="toggleTimer">{{timerRunning ? '暂停计时' : '开始计时'}}</button>
+          <button class="btn btn-secondary timer-reset" bindtap="resetTimer">重置</button>
+        </view>
+      </view>
+      <view class="section tool-section">
+        <view class="section-head"><text class="section-title">分幕计划</text><text class="section-hint">分钟可调整</text></view>
+        <view class="segment-list">
+          <view wx:for="{{segments}}" wx:key="label" class="segment-row {{item.active ? 'segment-active' : ''}}" data-index="{{index}}" bindtap="selectSegment">
+            <view class="segment-state"><text class="segment-index">{{index + 1}}</text><text>{{item.label}}</text></view>
+            <input class="segment-minutes" type="number" value="{{item.minutes}}" data-index="{{index}}" catchtap="noop" bindinput="onSegmentMinutes" />
+            <text class="segment-status">{{item.status}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:elif="{{activeTab === 'notes'}}" class="tool-panel">
+      <view class="section tool-section first-section"><text class="section-title">把线索放在同一个地方</text><text class="section-hint">按分类记录，打完可回看</text></view>
+      <scroll-view scroll-x class="category-scroll" show-scrollbar="{{false}}"><view class="category-row"><button wx:for="{{noteCategories}}" wx:key="*this" class="category-chip {{noteCategory === item ? 'category-active' : ''}}" data-category="{{item}}" bindtap="chooseNoteCategory">{{item}}</button></view></scroll-view>
+      <view class="note-editor">
+        <input class="input" value="{{noteForm.title}}" data-field="title" bindinput="onNoteInput" maxlength="80" placeholder="标题，例如：第二幕时间线" />
+        <textarea class="textarea note-textarea" value="{{noteForm.content}}" data-field="content" bindinput="onNoteInput" maxlength="1000" placeholder="记下人物关系、线索、疑点或时间点" />
+        <button class="btn btn-primary btn-full" loading="{{savingNote}}" bindtap="saveNote">保存这条笔记</button>
+      </view>
+      <view wx:if="{{notes.length}}" class="note-list">
+        <view wx:for="{{notes}}" wx:key="id" class="note-item"><view class="note-item-head"><text class="note-category">{{item.category}}</text><text class="note-date">{{item.createdAt}}</text></view><text wx:if="{{item.title}}" class="note-title">{{item.title}}</text><text class="note-content">{{item.content}}</text></view>
+      </view>
+      <view wx:else class="empty note-empty">还没有笔记，先记下第一条线索</view>
+    </view>
+
+    <view wx:elif="{{activeTab === 'record'}}" class="tool-panel">
+      <view class="section tool-section first-section"><text class="section-title">打完就留下记录</text><text class="section-hint">你的体验会成为下一次推荐的依据</text></view>
+      <view class="record-editor">
+        <view class="field"><text class="label">这次拿到的角色</text><input class="input" value="{{recordForm.role}}" data-field="role" bindinput="onRecordInput" maxlength="80" placeholder="可选，例如：侦探" /></view>
+        <view class="field"><text class="label">整体体验</text><view class="rating-row"><button wx:for="{{ratingOptions}}" wx:key="*this" class="rating {{recordForm.rating >= item ? 'rating-active' : ''}}" data-rating="{{item}}" bindtap="selectRating">{{item}}</button></view></view>
+        <view class="field"><text class="label">一句话短评</text><textarea class="textarea" value="{{recordForm.note}}" data-field="note" bindinput="onRecordInput" maxlength="500" placeholder="这本最值得记住的是什么？" /></view>
+        <button class="btn btn-primary btn-full" loading="{{savingRecord}}" bindtap="saveRecord">保存到我的档案</button>
+      </view>
+      <view wx:if="{{records.length}}" class="recent-records"><text class="section-title">最近记录</text><view wx:for="{{records}}" wx:key="id" class="recent-row"><view><text class="recent-title">{{item.scriptTitle}}</text><text class="recent-meta">{{item.playedAt}} · {{item.role || '未填写角色'}}</text></view><text class="recent-rating">{{item.rating}} / 5</text></view></view>
+    </view>
+  </view>
+</view>

@@ -16,6 +16,8 @@
   <view wx:else>
     <view class="quick-nav">
       <button class="quick-nav-item" bindtap="goTasteTest"><text class="quick-nav-title">口味测试</text><text class="quick-nav-hint">更新选本偏好</text></button>
+      <button class="quick-nav-item" bindtap="goTools"><text class="quick-nav-title">打本工具</text><text class="quick-nav-hint">计时、笔记、打卡</text></button>
+      <button class="quick-nav-item" bindtap="goArchive"><text class="quick-nav-title">我的档案</text><text class="quick-nav-hint">记录与偏好统计</text></button>
     </view>
     <view class="card completion-card">
       <view class="completion-head">

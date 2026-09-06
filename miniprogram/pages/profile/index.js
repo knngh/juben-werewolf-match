@@ -261,6 +261,22 @@ Page({
     wx.navigateTo({ url: '/pages/taste-test/index' });
   },
 
+  goTools() {
+    if (!api.getToken()) {
+      this.goLogin();
+      return;
+    }
+    wx.navigateTo({ url: '/pages/tools/index' });
+  },
+
+  goArchive() {
+    if (!api.getToken()) {
+      this.goLogin();
+      return;
+    }
+    wx.navigateTo({ url: '/pages/archive/index' });
+  },
+
   logout() {
     app.logout();
     this.setData({

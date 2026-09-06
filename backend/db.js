@@ -65,6 +65,34 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_script_actions_user ON script_actions(user_id, action);
   CREATE INDEX IF NOT EXISTS idx_script_actions_script ON script_actions(script_id, action);
 
+  CREATE TABLE IF NOT EXISTS play_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    script_id INTEGER NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+    role TEXT,
+    rating INTEGER,
+    note TEXT,
+    played_at TEXT NOT NULL DEFAULT (date('now')),
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_play_records_user ON play_records(user_id, played_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_play_records_script ON play_records(script_id, user_id);
+
+  CREATE TABLE IF NOT EXISTS script_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    script_id INTEGER NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    title TEXT,
+    content TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_script_notes_user_script ON script_notes(user_id, script_id, created_at DESC);
+
   CREATE TABLE IF NOT EXISTS likes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_user_id INTEGER NOT NULL REFERENCES users(id),

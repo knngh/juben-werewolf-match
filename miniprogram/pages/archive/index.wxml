@@ -1,0 +1,37 @@
+<view class="page archive-page">
+  <view class="toolbar">
+    <view><text class="title">我的打本档案</text><text class="subtitle">每一次记录，都会让下一次选本更接近你</text></view>
+    <button wx:if="{{loggedIn}}" class="btn btn-secondary btn-small" bindtap="goTools">去记录</button>
+  </view>
+
+  <view wx:if="{{!loggedIn}}" class="card login-card">
+    <text class="section-title">登录后保存你的打本轨迹</text>
+    <text class="hint">记录剧本、角色和体验，慢慢形成自己的口味地图。</text>
+    <button class="btn btn-primary btn-full login-btn" bindtap="goLogin">登录</button>
+  </view>
+  <view wx:elif="{{loading}}" class="loading">正在整理你的档案...</view>
+  <view wx:else>
+    <view class="archive-hero">
+      <text class="archive-kicker">YOUR PLAY HISTORY</text>
+      <text class="archive-title">{{summary.total}} 次打本记录</text>
+      <text class="archive-desc">当前最常玩的类型：{{topType}}</text>
+    </view>
+
+    <view class="stat-grid">
+      <view class="stat-card"><text class="stat-value">{{summary.total}}</text><text class="stat-label">累计打本</text></view>
+      <view class="stat-card"><text class="stat-value">{{averageRatingText}}</text><text class="stat-label">平均评分</text></view>
+      <view class="stat-card"><text class="stat-value">{{summary.ratedCount}}</text><text class="stat-label">已评分</text></view>
+    </view>
+
+    <view wx:if="{{summary.typeCounts.length}}" class="section type-section">
+      <text class="section-title">类型偏好</text>
+      <view class="type-list"><view wx:for="{{typeRows}}" wx:key="gameType" class="type-row"><text>{{item.gameType}}</text><view class="type-bar"><view style="width: {{item.barWidth}}%;"></view></view><text class="type-count">{{item.count}}</text></view></view>
+    </view>
+
+    <view class="section record-section">
+      <view class="section-head"><text class="section-title">最近打本</text><button class="text-link" bindtap="goTools">打开工具</button></view>
+      <view wx:if="{{records.length}}" class="record-list"><view wx:for="{{records}}" wx:key="id" class="record-row"><view class="record-main"><text class="record-title">{{item.scriptTitle}}</text><text class="record-meta">{{item.playedAt}} · {{item.gameType}} · {{item.role || '未填写角色'}}</text><text wx:if="{{item.note}}" class="record-note">{{item.note}}</text></view><text wx:if="{{item.rating}}" class="record-rating">{{item.rating}} / 5</text></view></view>
+      <view wx:else class="empty archive-empty"><text class="empty-title">还没有打本记录</text><text class="empty-hint">从推荐页挑一本，开始你的第一场记录</text><button class="btn btn-primary archive-empty-btn" bindtap="goScripts">去选本</button></view>
+    </view>
+  </view>
+</view>

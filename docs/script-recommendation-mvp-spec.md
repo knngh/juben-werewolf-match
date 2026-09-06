@@ -4,7 +4,7 @@
 
 首发版先验证一个用户可以独立完成的线上闭环：
 
-`口味测试 -> 结构化剧本库 -> 个性化推荐 -> 剧本详情 -> 收藏/跳过/浏览记录`
+`口味测试 -> 结构化剧本库 -> 个性化推荐 -> 剧本详情 -> 打本工具 -> 打卡档案`
 
 这条链路不依赖店家、车源或其他在线用户，适合用内容和小程序工具冷启动。找局、发现同好、匹配能力继续保留，但作为后续承接入口，不承担 MVP 的首要价值证明。
 
@@ -15,6 +15,8 @@
 | `pages/scripts/index` | `GET /api/scripts`、`GET /api/taste-profile`、`POST /api/scripts/:id/action` | 可浏览、搜索和筛选；匹配度显示为待测试 |
 | `pages/taste-test/index` | `GET /api/options`、`GET/POST /api/taste-profile` | 跳转登录，登录后回到测试页 |
 | `pages/script-detail/index` | `GET /api/scripts/:id`、`POST /api/scripts/:id/action`、`POST /api/ai/script-explanation` | 可看公开详情；收藏、跳过和 AI 解释需登录 |
+| `pages/tools/index` | `GET /api/scripts`、`GET/POST /api/scripts/:id/notes`、`GET/POST /api/play-records` | 登录后使用分幕计时、笔记和打卡 |
+| `pages/archive/index` | `GET /api/play-records` | 登录后查看记录、评分和类型偏好 |
 
 ## 剧本字段
 
@@ -55,6 +57,8 @@ AI 只做解释和内容辅助，不替用户做决定：
 - 收藏后重新浏览仍保留 `saved` 状态；取消收藏不会删除浏览记录。
 - 跳过后列表不再出现该剧本，恢复后重新出现。
 - 进入详情后登录用户记录一次 `view`，不影响公开详情展示。
+- 打本工具可以调整分幕分钟数、开始/暂停/重置计时，并保存四类结构化笔记。
+- 打卡记录至少保存剧本、日期、评分和短评；档案页返回累计次数、平均评分和类型分布。
 - AI 能力关闭或调用失败时，详情页不被阻断。
 - `node scripts/test-book-recommendation.js`、`npm run smoke:sessions`、`node scripts/smoke-miniprogram.js` 全部通过。
 
