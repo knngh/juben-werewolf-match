@@ -34,12 +34,14 @@
 ```bash
 cd backend
 cp .env.example .env
-# 在 .env 中配置 TIANDITU_KEY，用于地点搜索；小程序微信登录需配置 WECHAT_MINIPROGRAM_APPID / WECHAT_MINIPROGRAM_SECRET
+# 在 .env 中配置 TIANDITU_KEY，用于地点搜索；生产环境的小程序微信登录需配置 WECHAT_MINIPROGRAM_APPID / WECHAT_MINIPROGRAM_SECRET
 npm install
 npm start
 ```
 
 API 默认：`http://localhost:3000`
+
+本地微信开发工具联调请运行 `npm run dev`。该命令会自动开启 `WECHAT_LOGIN_DEV_MODE=true`，用 `wx.login` 的 code 生成开发用户，不需要真实微信 Secret；生产环境请使用 `npm start`，并配置真实 AppID 和 Secret。
 
 后端会读取 `backend/.env`，其中 `TIANDITU_KEY` 和 `WECHAT_MINIPROGRAM_SECRET` 只在服务端使用；前端和小程序不直接暴露 key/secret。
 
