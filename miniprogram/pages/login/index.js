@@ -101,7 +101,10 @@ Page({
           if (res.code === 0 && res.data) {
             this.completeLogin(res.data);
           } else {
-            wx.showToast({ title: res.message || '微信登录失败', icon: 'none' });
+            const message = res.code === 503
+              ? '本地开发请运行 npm run dev；生产请配置微信 AppID 和 Secret'
+              : (res.message || '微信登录失败');
+            wx.showToast({ title: message, icon: 'none', duration: 3000 });
           }
         });
       },

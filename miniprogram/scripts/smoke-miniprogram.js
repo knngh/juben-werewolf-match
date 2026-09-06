@@ -60,6 +60,7 @@ const loginSource = fs.readFileSync(path.join(root, 'pages/login/index.js'), 'ut
 assert(loginSource.includes('wx.login'), '登录页应接入 wx.login');
 assert(loginSource.includes('/api/wechat/login'), '登录页应调用微信登录 API');
 assert(loginSource.includes('navigateAfterLogin'), '登录页应支持登录后回跳');
+assert(loginSource.includes('npm run dev'), '登录页应提示本地微信开发模式启动方式');
 
 const sessionDetailSource = fs.readFileSync(path.join(root, 'pages/session-detail/index.js'), 'utf8');
 assert(sessionDetailSource.includes('onShareAppMessage'), '局详情页应支持分享');
