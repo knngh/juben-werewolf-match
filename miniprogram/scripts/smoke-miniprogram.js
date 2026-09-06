@@ -18,19 +18,22 @@ const appJson = readJson('app.json');
 const projectConfig = readJson('project.config.json');
 
 assert(Array.isArray(appJson.pages) && appJson.pages.length > 0, 'app.json pages 不能为空');
-assert(appJson.pages[0] === 'pages/sessions/index', '首屏应为找局页');
+assert(appJson.pages[0] === 'pages/scripts/index', '首屏应为智能选本页');
 assert(Array.isArray(appJson.tabBar && appJson.tabBar.list), 'tabBar 配置缺失');
 
 const tabPages = new Set(appJson.tabBar.list.map((item) => item.pagePath));
 [
+  'pages/scripts/index',
   'pages/sessions/index',
   'pages/discover/index',
-  'pages/matches/index',
   'pages/profile/index',
 ].forEach((page) => assert(tabPages.has(page), `tabBar 缺少 ${page}`));
 
 [
   'pages/login/index',
+  'pages/scripts/index',
+  'pages/taste-test/index',
+  'pages/script-detail/index',
   'pages/sessions/index',
   'pages/create-session/index',
   'pages/session-detail/index',
@@ -76,6 +79,22 @@ assert(sessionDetailSource.includes('gameGuide'), '局详情页应按后端能�
 const sessionsSource = fs.readFileSync(path.join(root, 'pages/sessions/index.js'), 'utf8');
 assert(sessionsSource.includes('onShareAppMessage'), '找局页应支持分享');
 assert(sessionsSource.includes('wx.showShareMenu'), '找局页应显式启用分享菜单');
+
+const scriptsSource = fs.readFileSync(path.join(root, 'pages/scripts/index.js'), 'utf8');
+assert(scriptsSource.includes('/api/scripts'), '选本页应接入剧本库接口');
+assert(scriptsSource.includes('/api/taste-profile'), '选本页应读取口味画像状态');
+assert(scriptsSource.includes('/api/scripts/' + "' + id + '" + '/action'), '选本页应支持收藏和跳过');
+assert(scriptsSource.includes('loginUrlWithRedirect'), '选本页未登录互动应带回跳地址');
+
+const tasteSource = fs.readFileSync(path.join(root, 'pages/taste-test/index.js'), 'utf8');
+assert(tasteSource.includes('tasteQuestions'), '口味测试页应使用后端题目配置');
+assert(tasteSource.includes('/api/taste-profile'), '口味测试页应保存画像');
+assert(tasteSource.includes('最多选择'), '口味测试页应限制多选数量');
+
+const scriptDetailSource = fs.readFileSync(path.join(root, 'pages/script-detail/index.js'), 'utf8');
+assert(scriptDetailSource.includes('/api/scripts/'), '剧本详情页应接入详情接口');
+assert(scriptDetailSource.includes('/api/ai/script-explanation'), '剧本详情页应接入 AI 推荐解释');
+assert(scriptDetailSource.includes('loginUrlWithRedirect'), '剧本详情页未登录互动应带回跳地址');
 
 const discoverSource = fs.readFileSync(path.join(root, 'pages/discover/index.js'), 'utf8');
 assert(discoverSource.includes('/api/discover'), '发现页应接入推荐用户接口');

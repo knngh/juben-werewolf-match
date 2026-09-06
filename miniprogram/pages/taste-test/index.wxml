@@ -1,0 +1,30 @@
+<view class="page taste-page">
+  <view wx:if="{{loading}}" class="loading">正在准备测试...</view>
+  <view wx:elif="{{currentQuestion}}">
+    <view class="step-head">
+      <text class="step-count">{{currentIndex + 1}} / {{questions.length}}</text>
+      <text class="step-label">口味画像</text>
+    </view>
+    <view class="progress-track">
+      <view class="progress-value" style="width: {{progress}}%;"></view>
+    </view>
+
+    <view class="question-panel">
+      <text class="question-title">{{currentQuestion.title}}</text>
+      <text class="question-hint">{{questionHint}}</text>
+
+      <view class="option-list">
+        <button wx:for="{{optionRows}}" wx:key="value" class="option {{item.active ? 'option-active' : ''}}" data-value="{{item.value}}" bindtap="selectOption">
+          <text class="option-mark">{{item.active ? '✓' : ''}}</text>
+          <text class="option-text">{{item.value}}</text>
+        </button>
+      </view>
+    </view>
+
+    <view class="taste-actions">
+      <button class="btn btn-secondary action-btn" disabled="{{currentIndex === 0}}" bindtap="previous">上一步</button>
+      <button class="btn btn-primary action-btn" loading="{{submitting}}" bindtap="next">{{nextLabel}}</button>
+    </view>
+    <text class="privacy-note">回答只用于排序和避雷，不会自动替你做决定。</text>
+  </view>
+</view>

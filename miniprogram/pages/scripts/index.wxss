@@ -1,0 +1,310 @@
+.scripts-page {
+  padding-top: 22rpx;
+}
+
+.header,
+.script-head,
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.taste-banner {
+  display: flex;
+  gap: 20rpx;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 28rpx;
+  padding: 24rpx;
+  border-left: 6rpx solid #1f7a4d;
+  border-radius: 10rpx;
+  background: #eaf4ed;
+}
+
+.taste-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.taste-title,
+.taste-desc {
+  display: block;
+}
+
+.taste-title {
+  color: #234631;
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.taste-desc {
+  margin-top: 8rpx;
+  color: #617064;
+  font-size: 23rpx;
+  line-height: 1.5;
+}
+
+.banner-btn {
+  flex: 0 0 auto;
+  min-height: 66rpx;
+  padding: 0 22rpx;
+  font-size: 25rpx;
+}
+
+.search-row {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 24rpx;
+}
+
+.search-input {
+  min-height: 76rpx;
+  padding: 0 22rpx;
+  border: 1rpx solid #d8ded2;
+  border-radius: 10rpx;
+  background: #ffffff;
+}
+
+.search-btn {
+  width: 112rpx;
+  min-height: 76rpx;
+  border-radius: 10rpx;
+  background: #25352a;
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.filter-scroll {
+  width: 100%;
+  margin-top: 20rpx;
+  white-space: nowrap;
+}
+
+.difficulty-scroll {
+  margin-top: 12rpx;
+}
+
+.filter-row {
+  display: inline-flex;
+  gap: 12rpx;
+  padding-right: 28rpx;
+}
+
+.filter-chip {
+  min-height: 60rpx;
+  padding: 0 22rpx;
+  border: 1rpx solid #d6ddd2;
+  border-radius: 10rpx;
+  background: #ffffff;
+  color: #5d655b;
+  font-size: 24rpx;
+}
+
+.compact-chip {
+  min-height: 52rpx;
+  padding: 0 18rpx;
+  font-size: 23rpx;
+}
+
+.filter-active {
+  border-color: #1f7a4d;
+  background: #1f7a4d;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.script-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  margin-top: 24rpx;
+}
+
+.script-card {
+  padding: 26rpx;
+  border: 1rpx solid #dfe4db;
+  border-radius: 12rpx;
+  background: #ffffff;
+}
+
+.script-head {
+  align-items: flex-start;
+}
+
+.type-line {
+  display: flex;
+  gap: 12rpx;
+  align-items: center;
+}
+
+.script-type,
+.difficulty {
+  color: #41604c;
+  font-size: 23rpx;
+  font-weight: 600;
+}
+
+.difficulty {
+  color: #7b8075;
+  font-weight: 400;
+}
+
+.match-box {
+  min-width: 108rpx;
+  text-align: right;
+}
+
+.match-score,
+.match-level,
+.match-pending {
+  display: block;
+}
+
+.match-score {
+  color: #1f7a4d;
+  font-size: 34rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.match-level,
+.match-pending {
+  margin-top: 5rpx;
+  color: #718075;
+  font-size: 20rpx;
+}
+
+.match-pending {
+  margin-top: 0;
+}
+
+.script-title {
+  display: block;
+  margin-top: 10rpx;
+  color: #172019;
+  font-size: 36rpx;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.script-meta {
+  display: block;
+  margin-top: 10rpx;
+  color: #697166;
+  font-size: 24rpx;
+}
+
+.script-tags {
+  margin-top: 18rpx;
+}
+
+.script-tags .tag {
+  min-height: 44rpx;
+  padding: 0 14rpx;
+  font-size: 22rpx;
+}
+
+.reason-line {
+  display: flex;
+  gap: 14rpx;
+  align-items: center;
+  margin-top: 20rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 8rpx;
+  background: #eef7f1;
+}
+
+.reason-label {
+  flex: 0 0 auto;
+  color: #1f7a4d;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.reason-text {
+  color: #3e5144;
+  font-size: 24rpx;
+}
+
+.signal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14rpx;
+  margin-top: 20rpx;
+}
+
+.signal-block {
+  min-width: 0;
+  padding: 18rpx;
+  border-radius: 8rpx;
+  background: #f5f7f2;
+}
+
+.warning-block {
+  background: #fbf5f1;
+}
+
+.signal-label,
+.signal-text {
+  display: block;
+}
+
+.signal-label {
+  color: #42604d;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.warning-label {
+  color: #9a5b3e;
+}
+
+.signal-text {
+  margin-top: 8rpx;
+  color: #5e665d;
+  font-size: 23rpx;
+  line-height: 1.45;
+}
+
+.card-actions {
+  margin-top: 22rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid #edf0ea;
+}
+
+.text-action,
+.save-action {
+  min-height: 54rpx;
+  padding: 0 18rpx;
+  color: #747b72;
+  font-size: 24rpx;
+}
+
+.save-action {
+  border: 1rpx solid #c9d8cd;
+  border-radius: 9rpx;
+  color: #2f6948;
+}
+
+.save-active {
+  border-color: #1f7a4d;
+  background: #e8f3ec;
+  color: #1f7a4d;
+}
+
+.empty-title,
+.empty-hint {
+  display: block;
+}
+
+.empty-title {
+  color: #3b463d;
+  font-weight: 700;
+}
+
+.empty-hint {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+}

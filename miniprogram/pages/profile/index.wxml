@@ -16,6 +16,7 @@
   <view wx:elif="{{loading}}" class="loading">加载中...</view>
   <view wx:else>
     <view class="quick-nav">
+      <button class="quick-nav-item" bindtap="goTasteTest"><text class="quick-nav-title">口味测试</text><text class="quick-nav-hint">更新选本偏好</text></button>
       <button class="quick-nav-item" bindtap="goMySessions"><text class="quick-nav-title">我的局</text><text class="quick-nav-hint">发布与申请</text></button>
       <button class="quick-nav-item" bindtap="goDiscover"><text class="quick-nav-title">发现</text><text class="quick-nav-hint">找同好</text></button>
       <button class="quick-nav-item" bindtap="goMatches"><text class="quick-nav-title">匹配</text><text class="quick-nav-hint">互相喜欢</text></button>

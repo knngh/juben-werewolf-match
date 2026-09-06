@@ -1,7 +1,7 @@
 const TAB_PAGES = [
+  'pages/scripts/index',
   'pages/sessions/index',
   'pages/discover/index',
-  'pages/matches/index',
   'pages/profile/index',
 ];
 
@@ -19,7 +19,7 @@ function toQuery(params) {
 function currentPageUrl() {
   const pages = getCurrentPages();
   const current = pages[pages.length - 1];
-  if (!current) return '/pages/sessions/index';
+  if (!current) return '/pages/scripts/index';
   return '/' + current.route + toQuery(current.options || {});
 }
 
@@ -29,7 +29,7 @@ function loginUrlWithRedirect(redirect) {
 
 function navigateAfterLogin(redirect) {
   if (!redirect) {
-    wx.switchTab({ url: '/pages/sessions/index' });
+    wx.switchTab({ url: '/pages/scripts/index' });
     return;
   }
   const target = decodeURIComponent(redirect);

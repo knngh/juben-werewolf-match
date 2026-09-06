@@ -206,6 +206,13 @@ ai_usage_logs
 - 局详情增加“AI 玩法攻略”，失败时不影响申请和查看局详情。
 - 根据 `GET /api/ai/capabilities` 决定是否显示按钮。
 
+选本推荐链路已接入：
+
+- 结构化剧本库和口味画像接口：`GET /api/scripts`、`GET /api/scripts/:id`、`GET/POST /api/taste-profile`。
+- 规则推荐负责排序、过滤、匹配分和理由；小程序首屏不展示未完成测试用户的伪匹配分。
+- 剧本详情按需调用 `POST /api/ai/script-explanation`，只解释公开信息和规则信号，不输出剧透或联系方式。
+- 收藏、跳过、恢复和浏览行为写入 `script_actions`，为后续推荐校准和个人档案提供数据。
+
 下一步是真实模型供应商完善：
 
 - 用真实 OpenRouter key 做生产前联调。

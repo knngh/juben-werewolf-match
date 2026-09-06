@@ -1,0 +1,82 @@
+<view class="page scripts-page">
+  <view class="header">
+    <view>
+      <text class="title">今天玩什么</text>
+      <text class="subtitle">按口味、雷点和游玩经验排序</text>
+    </view>
+    <button class="btn btn-secondary btn-small" bindtap="goTasteTest">{{tasteCompleted ? '重测口味' : '测口味'}}</button>
+  </view>
+
+  <view wx:if="{{!loggedIn || !tasteCompleted}}" class="taste-banner">
+    <view class="taste-copy">
+      <text class="taste-title">{{loggedIn ? '还差一步，解锁匹配度' : '3 分钟找到更适合你的本'}}</text>
+      <text class="taste-desc">{{loggedIn ? '完成 4 道口味题，推荐会结合偏好与雷点排序。' : '未登录也能浏览；登录完成测试后可收藏、跳过并获得个性化理由。'}}</text>
+    </view>
+    <button class="btn btn-primary banner-btn" bindtap="goTasteTest">开始测试</button>
+  </view>
+
+  <view class="search-row">
+    <input class="search-input" value="{{filters.q}}" bindinput="onSearchInput" bindconfirm="load" confirm-type="search" placeholder="搜剧本、标签或亮点" />
+    <button class="search-btn" bindtap="load">搜索</button>
+  </view>
+
+  <scroll-view scroll-x class="filter-scroll" show-scrollbar="{{false}}">
+    <view class="filter-row">
+      <button wx:for="{{gameTypes}}" wx:key="value" class="filter-chip {{item.active ? 'filter-active' : ''}}" data-field="gameType" data-value="{{item.value}}" bindtap="applyFilter">{{item.label}}</button>
+    </view>
+  </scroll-view>
+  <scroll-view scroll-x class="filter-scroll difficulty-scroll" show-scrollbar="{{false}}">
+    <view class="filter-row">
+      <button wx:for="{{difficulties}}" wx:key="value" class="filter-chip compact-chip {{item.active ? 'filter-active' : ''}}" data-field="difficulty" data-value="{{item.value}}" bindtap="applyFilter">{{item.label}}</button>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{loading}}" class="loading">正在整理适合你的剧本...</view>
+  <view wx:elif="{{!scripts.length}}" class="empty">
+    <text class="empty-title">没有找到合适结果</text>
+    <text class="empty-hint">换个关键词或筛选条件再试试</text>
+  </view>
+  <view wx:else class="script-list">
+    <view wx:for="{{scripts}}" wx:key="id" class="script-card" data-id="{{item.id}}" bindtap="goDetail">
+      <view class="script-head">
+        <view class="type-line">
+          <text class="script-type">{{item.gameType}}</text>
+          <text class="difficulty">{{item.difficulty}}</text>
+        </view>
+        <view wx:if="{{item.matchScoreText}}" class="match-box">
+          <text class="match-score">{{item.matchScoreText}}</text>
+          <text class="match-level">{{item.matchLevel}}</text>
+        </view>
+        <text wx:else class="match-pending">测试后看匹配度</text>
+      </view>
+
+      <text class="script-title">{{item.title}}</text>
+      <text class="script-meta">{{item.playerText}} · {{item.durationText}} · {{item.difficulty}}</text>
+
+      <view wx:if="{{item.tags.length}}" class="tag-row script-tags">
+        <text wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" class="tag">{{tag}}</text>
+      </view>
+
+      <view wx:if="{{item.primaryReason}}" class="reason-line">
+        <text class="reason-label">推荐依据</text>
+        <text class="reason-text">{{item.primaryReason}}</text>
+      </view>
+
+      <view class="signal-grid">
+        <view class="signal-block">
+          <text class="signal-label">核心亮点</text>
+          <text class="signal-text">{{item.highlights[0] || '查看详情了解亮点'}}</text>
+        </view>
+        <view class="signal-block warning-block">
+          <text class="signal-label warning-label">先看雷点</text>
+          <text class="signal-text">{{item.warnings[0] || '暂无明显雷点'}}</text>
+        </view>
+      </view>
+
+      <view class="card-actions">
+        <button class="text-action" data-id="{{item.id}}" catchtap="dismiss">不感兴趣</button>
+        <button class="save-action {{item.saved ? 'save-active' : ''}}" data-id="{{item.id}}" data-saved="{{item.saved}}" catchtap="toggleSave">{{item.saved ? '已收藏' : '收藏'}}</button>
+      </view>
+    </view>
+  </view>
+</view>

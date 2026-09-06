@@ -1,0 +1,61 @@
+<view class="page detail-page">
+  <view wx:if="{{loading}}" class="loading">正在打开剧本...</view>
+  <view wx:elif="{{script}}">
+    <view class="detail-hero">
+      <view class="detail-type-row">
+        <text class="script-type">{{script.gameType}}</text>
+        <text class="detail-difficulty">{{script.difficulty}}</text>
+      </view>
+      <text class="detail-title">{{script.title}}</text>
+      <text class="detail-description">{{script.description}}</text>
+      <view wx:if="{{script.matchScoreText}}" class="detail-match">
+        <text class="detail-score">{{script.matchScoreText}}</text>
+        <text class="detail-score-label">与你的口味匹配</text>
+      </view>
+      <text wx:else class="detail-match-pending">完成口味测试后查看匹配度</text>
+    </view>
+
+    <view class="tag-row detail-tags">
+      <text wx:for="{{script.tags}}" wx:for-item="tag" wx:key="*this" class="tag">{{tag}}</text>
+    </view>
+
+    <view class="stat-row">
+      <view class="stat-item"><text class="stat-value">{{script.playerText}}</text><text class="stat-label">人数</text></view>
+      <view class="stat-item"><text class="stat-value">{{script.durationText}}</text><text class="stat-label">时长</text></view>
+      <view class="stat-item"><text class="stat-value">{{script.difficulty}}</text><text class="stat-label">难度</text></view>
+    </view>
+
+    <view wx:if="{{script.matchReasons.length}}" class="section detail-section">
+      <text class="section-title">为什么推荐</text>
+      <view class="reason-list">
+        <view wx:for="{{script.matchReasons}}" wx:for-item="reason" wx:key="*this" class="reason-item"><text class="reason-dot">●</text><text>{{reason}}</text></view>
+      </view>
+    </view>
+
+    <view class="section detail-section">
+      <text class="section-title">核心亮点</text>
+      <view class="bullet-list">
+        <view wx:for="{{script.highlights}}" wx:for-item="highlight" wx:key="*this" class="bullet-item"><text class="bullet-mark">+</text><text>{{highlight}}</text></view>
+      </view>
+    </view>
+
+    <view class="section detail-section warning-section">
+      <text class="section-title warning-title">明确雷点</text>
+      <view class="bullet-list">
+        <view wx:for="{{script.warnings}}" wx:for-item="warning" wx:key="*this" class="bullet-item"><text class="bullet-mark warning-mark">!</text><text>{{warning}}</text></view>
+      </view>
+    </view>
+
+    <view class="section detail-section ai-section">
+      <view class="section-head"><text class="section-title">AI 选本说明</text><text class="ai-badge">不剧透</text></view>
+      <text wx:if="{{explanationReady}}" class="explanation">{{explanation}}</text>
+      <text wx:else class="explanation-placeholder">结合你的口味偏好，生成一段克制的推荐说明。</text>
+      <button class="btn btn-secondary btn-full ai-btn" loading="{{explanationLoading}}" bindtap="explain">{{explanationReady ? '重新生成' : '为什么推荐这本'}}</button>
+    </view>
+
+    <view class="bottom-actions">
+      <button class="btn btn-secondary action-main" bindtap="toggleSave">{{script.saved ? '已收藏' : '收藏'}}</button>
+      <button class="btn btn-primary action-main" bindtap="dismiss">不感兴趣</button>
+    </view>
+  </view>
+</view>

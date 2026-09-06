@@ -1,5 +1,8 @@
 {
   "pages": [
+    "pages/scripts/index",
+    "pages/taste-test/index",
+    "pages/script-detail/index",
     "pages/sessions/index",
     "pages/create-session/index",
     "pages/my/index",
@@ -23,16 +26,16 @@
     "borderStyle": "white",
     "list": [
       {
+        "pagePath": "pages/scripts/index",
+        "text": "选本"
+      },
+      {
         "pagePath": "pages/sessions/index",
         "text": "找局"
       },
       {
         "pagePath": "pages/discover/index",
         "text": "发现"
-      },
-      {
-        "pagePath": "pages/matches/index",
-        "text": "匹配"
       },
       {
         "pagePath": "pages/profile/index",
