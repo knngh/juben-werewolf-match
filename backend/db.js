@@ -2,6 +2,7 @@ require('./env')();
 
 const Database = require('better-sqlite3');
 const path = require('path');
+const starterScripts = require('./starter-scripts');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data.db');
 const db = new Database(DB_PATH);
@@ -30,6 +31,39 @@ db.exec(`
     city TEXT,
     updated_at TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS scripts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    game_type TEXT NOT NULL,
+    tags TEXT NOT NULL DEFAULT '[]',
+    difficulty TEXT NOT NULL DEFAULT '入门',
+    duration_min INTEGER NOT NULL DEFAULT 120,
+    min_players INTEGER NOT NULL DEFAULT 2,
+    max_players INTEGER NOT NULL DEFAULT 6,
+    highlights TEXT NOT NULL DEFAULT '[]',
+    warnings TEXT NOT NULL DEFAULT '[]',
+    description TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_scripts_game_type ON scripts(game_type);
+  CREATE INDEX IF NOT EXISTS idx_scripts_difficulty ON scripts(difficulty);
+
+  CREATE TABLE IF NOT EXISTS script_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    script_id INTEGER NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+    action TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(user_id, script_id, action)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_script_actions_user ON script_actions(user_id, action);
+  CREATE INDEX IF NOT EXISTS idx_script_actions_script ON script_actions(script_id, action);
 
   CREATE TABLE IF NOT EXISTS likes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -169,6 +203,8 @@ ensureColumn('profiles', 'availability', "TEXT DEFAULT '[]'");
 ensureColumn('profiles', 'budget_range', 'TEXT');
 ensureColumn('profiles', 'player_count_range', 'TEXT');
 ensureColumn('profiles', 'play_modes', "TEXT DEFAULT '[]'");
+ensureColumn('profiles', 'taste_profile', "TEXT DEFAULT '{}' ");
+ensureColumn('profiles', 'taste_completed_at', 'TEXT');
 
 ensureColumn('users', 'mp_openid', 'TEXT');
 ensureColumn('users', 'mp_unionid', 'TEXT');
@@ -196,5 +232,25 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mp_openid ON users(mp_openid) WHERE mp_openid IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_users_mp_unionid ON users(mp_unionid);
 `);
+
+const insertStarterScript = db.prepare(`
+  INSERT OR IGNORE INTO scripts (
+    slug, title, game_type, tags, difficulty, duration_min, min_players, max_players,
+    highlights, warnings, description
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+starterScripts.forEach((item) => insertStarterScript.run(
+  item.slug,
+  item.title,
+  item.gameType,
+  JSON.stringify(item.tags),
+  item.difficulty,
+  item.durationMin,
+  item.minPlayers,
+  item.maxPlayers,
+  JSON.stringify(item.highlights),
+  JSON.stringify(item.warnings),
+  item.description
+));
 
 module.exports = db;

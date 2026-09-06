@@ -1,10 +1,11 @@
-const AI_FEATURE_KEYS = ['sessionDraft', 'requestMessage', 'matchExplanation', 'gameGuide', 'reportClassification', 'opsSummary'];
+const AI_FEATURE_KEYS = ['sessionDraft', 'requestMessage', 'matchExplanation', 'gameGuide', 'scriptExplanation', 'reportClassification', 'opsSummary'];
 const AI_PROVIDER_FEATURES = {
   mock: {
     sessionDraft: true,
     requestMessage: true,
     matchExplanation: true,
     gameGuide: true,
+    scriptExplanation: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -13,6 +14,7 @@ const AI_PROVIDER_FEATURES = {
     requestMessage: true,
     matchExplanation: true,
     gameGuide: true,
+    scriptExplanation: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -21,6 +23,7 @@ const AI_PROVIDER_FEATURES = {
     requestMessage: true,
     matchExplanation: true,
     gameGuide: true,
+    scriptExplanation: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -29,6 +32,7 @@ const AI_PROVIDER_FEATURES = {
     requestMessage: true,
     matchExplanation: true,
     gameGuide: true,
+    scriptExplanation: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -53,6 +57,16 @@ function normalizeTags(tags) {
     .map((tag) => String(tag || '').trim())
     .filter(Boolean)
     .slice(0, 8);
+}
+
+function parseJsonArray(value) {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function normalizeText(value, maxLength = 80) {
@@ -850,6 +864,44 @@ async function generateGameGuide(config, session = {}) {
   return createAiResult(normalizeAiGameGuide(result.data, session), result.meta);
 }
 
+function buildMockScriptExplanation(profile = {}, script = {}, reasons = []) {
+  const reasonText = normalizeTags(reasons).slice(0, 3).join('、');
+  const title = normalizeText(script.title, 40) || '这本剧本';
+  if (!reasonText) return `暂时没有足够的偏好信号判断${title}，可以先看看亮点和雷点。`;
+  return `${title}被推荐给你，主要因为${reasonText}。它的标签和你的口味画像有交集，建议再结合人数、时长和雷点做最终选择。`;
+}
+
+async function generateScriptExplanation(config, profile = {}, script = {}, reasons = []) {
+  if (config.provider === 'mock') {
+    return createAiResult(normalizeAiTextOutput(buildMockScriptExplanation(profile, script, reasons), 220));
+  }
+  const result = await callChatCompletionsJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: '把规则推荐信号转成克制的剧本推荐说明，不剧透、不夸大，不替用户做决定。',
+        reasons: normalizeTags(reasons),
+        tasteProfile: {
+          favoriteTags: normalizeTags(profile.favoriteTags),
+          avoidTags: normalizeTags(profile.avoidTags),
+          pace: normalizeText(profile.pace, 20),
+        },
+        script: {
+          title: normalizeText(script.title, 40),
+          gameType: normalizeText(script.game_type, 20),
+          tags: normalizeTags(parseJsonArray(script.tags)),
+          difficulty: normalizeText(script.difficulty, 20),
+          durationMin: script.duration_min,
+          highlights: normalizeTags(parseJsonArray(script.highlights)),
+          warnings: normalizeTags(parseJsonArray(script.warnings)),
+        },
+      }),
+    },
+  ], buildTextObjectSchema('script_explanation', 'explanation', 220));
+  return createAiResult(normalizeAiTextOutput(result.data.explanation, 220, '可以结合剧本标签、时长和雷点做最终选择。'), result.meta);
+}
+
 async function classifyReport(config, input = {}, options = {}) {
   if (config.provider === 'mock') {
     return createAiResult(normalizeAiReportClassification(buildMockReportClassification(input, options), options));
@@ -903,6 +955,8 @@ module.exports = {
   buildMockGameGuide,
   normalizeAiGameGuide,
   generateGameGuide,
+  buildMockScriptExplanation,
+  generateScriptExplanation,
   classifyReport,
   generateOpsSummary,
 };

@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 const db = require('./db');
 const { sign, middleware, requireAuth } = require('./auth');
 const ai = require('./ai');
+const bookRecommendation = require('./book-recommendation');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,6 +63,35 @@ const AI_OPTIONS = {
 };
 const SESSION_MATCH_SCORE_MAX = 19;
 const PROFILE_MATCH_SCORE_MAX = 21;
+const SCRIPT_ACTIONS = ['view', 'save', 'unsave', 'dismiss', 'restore'];
+const TASTE_TEST_QUESTIONS = [
+  {
+    key: 'experience',
+    title: '你更想从哪种体验开始？',
+    type: 'multi',
+    max: 2,
+    options: ['硬核推理', '情感沉浸', '机制阵营', '恐怖惊悚', '轻松社交'],
+  },
+  {
+    key: 'avoid',
+    title: '哪些情况你更想避开？',
+    type: 'multi',
+    max: 3,
+    options: ['怕尬', '怕边缘', '强行煽情', '公开对抗', '惊吓压迫'],
+  },
+  {
+    key: 'pace',
+    title: '你喜欢什么节奏？',
+    type: 'single',
+    options: ['短局轻量', '长时沉浸', '节奏紧凑', '都可以'],
+  },
+  {
+    key: 'frequency',
+    title: '你大概多久玩一次？',
+    type: 'single',
+    options: ['偶尔', '每月 1-2 次', '高频', '刚入门'],
+  },
+];
 
 app.get('/api/options', (req, res) => {
   res.json({
@@ -76,8 +106,166 @@ app.get('/api/options', (req, res) => {
       playModes: PLAY_MODES,
       requestCertainty: REQUEST_CERTAINTY,
       reportReasons: REPORT_REASONS,
+      tasteQuestions: TASTE_TEST_QUESTIONS,
     },
   });
+});
+
+function serializeTasteProfile(value) {
+  try {
+    return bookRecommendation.normalizeTasteProfile(JSON.parse(value || '{}'));
+  } catch {
+    return bookRecommendation.normalizeTasteProfile({});
+  }
+}
+
+function serializeScript(row, state = {}) {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    gameType: row.game_type,
+    tags: parseJsonArray(row.tags),
+    difficulty: row.difficulty,
+    durationMin: row.duration_min,
+    minPlayers: row.min_players,
+    maxPlayers: row.max_players,
+    highlights: parseJsonArray(row.highlights),
+    warnings: parseJsonArray(row.warnings),
+    description: row.description || '',
+    matchScore: state.matchScore,
+    matchReasons: state.reasons || [],
+    saved: !!state.saved,
+    dismissed: !!state.dismissed,
+    viewed: !!state.viewed,
+  };
+}
+
+function getScriptRows(filters = {}) {
+  const where = [];
+  const params = [];
+  if (filters.gameType) {
+    where.push('game_type = ?');
+    params.push(filters.gameType);
+  }
+  if (filters.difficulty) {
+    where.push('difficulty = ?');
+    params.push(filters.difficulty);
+  }
+  if (filters.q) {
+    where.push('(title LIKE ? OR description LIKE ? OR tags LIKE ? OR highlights LIKE ?)');
+    const q = `%${filters.q}%`;
+    params.push(q, q, q, q);
+  }
+  return db.prepare(`
+    SELECT * FROM scripts
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY id ASC
+    LIMIT 100
+  `).all(...params);
+}
+
+function getScriptState(userId, scriptId) {
+  if (!userId) return { saved: false, dismissed: false, viewed: false };
+  const rows = db.prepare('SELECT action FROM script_actions WHERE user_id = ? AND script_id = ?').all(userId, scriptId);
+  return {
+    saved: rows.some((item) => item.action === 'save'),
+    dismissed: rows.some((item) => item.action === 'dismiss'),
+    viewed: rows.some((item) => item.action === 'view'),
+  };
+}
+
+app.get('/api/scripts', (req, res) => {
+  const rows = getScriptRows({
+    gameType: normalizeText(req.query.gameType, 20),
+    difficulty: normalizeText(req.query.difficulty, 20),
+    q: normalizeText(req.query.q, 40),
+  });
+  const userId = req.userId || null;
+  const profileRow = userId ? db.prepare('SELECT taste_profile FROM profiles WHERE user_id = ?').get(userId) : null;
+  const tasteProfile = serializeTasteProfile(profileRow && profileRow.taste_profile);
+  let scripts = rows.map((row) => {
+    const state = getScriptState(userId, row.id);
+    const match = userId ? bookRecommendation.scoreBook(row, tasteProfile, {
+      viewed: state.viewed,
+      saved: state.saved,
+      dismissed: state.dismissed,
+    }) : { score: 0, matchScore: null, reasons: [] };
+    return {
+      ...serializeScript(row, { ...state, matchScore: match.matchScore, reasons: match.reasons }),
+      matchScore: match.matchScore,
+      matchReasons: match.reasons,
+      _score: match.score,
+    };
+  }).filter((item) => !item.dismissed);
+  scripts.sort((left, right) => right._score - left._score || left.id - right.id);
+  res.json({ code: 0, data: scripts.slice(0, 50).map(({ _score, ...item }) => item) });
+});
+
+app.get('/api/scripts/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ code: 400, message: '无效剧本' });
+  const row = db.prepare('SELECT * FROM scripts WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ code: 404, message: '剧本不存在' });
+  const userId = req.userId || null;
+  const profileRow = userId ? db.prepare('SELECT taste_profile FROM profiles WHERE user_id = ?').get(userId) : null;
+  const state = getScriptState(userId, id);
+  const match = userId ? bookRecommendation.scoreBook(row, serializeTasteProfile(profileRow && profileRow.taste_profile), {
+    viewed: state.viewed,
+    saved: state.saved,
+    dismissed: state.dismissed,
+  }) : { score: 0, matchScore: null, reasons: [] };
+  res.json({ code: 0, data: serializeScript(row, { ...state, matchScore: match.matchScore, reasons: match.reasons }) });
+});
+
+app.post('/api/scripts/:id/action', requireAuth, [body('action').isIn(SCRIPT_ACTIONS).withMessage('剧本操作无效')], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ code: 400, message: '无效剧本' });
+  if (!db.prepare('SELECT id FROM scripts WHERE id = ?').get(id)) return res.status(404).json({ code: 404, message: '剧本不存在' });
+  if (req.body.action === 'unsave') {
+    db.prepare("DELETE FROM script_actions WHERE user_id = ? AND script_id = ? AND action = 'save'").run(req.userId, id);
+    return res.json({ code: 0, data: { scriptId: id, action: 'unsave' }, message: '已取消收藏' });
+  }
+  if (req.body.action === 'restore') {
+    db.prepare("DELETE FROM script_actions WHERE user_id = ? AND script_id = ? AND action = 'dismiss'").run(req.userId, id);
+    return res.json({ code: 0, data: { scriptId: id, action: 'restore' }, message: '已恢复推荐' });
+  }
+  if (req.body.action === 'save') {
+    db.prepare("DELETE FROM script_actions WHERE user_id = ? AND script_id = ? AND action = 'dismiss'").run(req.userId, id);
+  }
+  if (req.body.action === 'dismiss') {
+    db.prepare("DELETE FROM script_actions WHERE user_id = ? AND script_id = ? AND action = 'save'").run(req.userId, id);
+  }
+  db.prepare(`
+    INSERT INTO script_actions (user_id, script_id, action, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(user_id, script_id, action) DO UPDATE SET updated_at = datetime('now')
+  `).run(req.userId, id, req.body.action);
+  res.json({ code: 0, data: { scriptId: id, action: req.body.action }, message: '已记录' });
+});
+
+app.get('/api/taste-profile', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT taste_profile, taste_completed_at FROM profiles WHERE user_id = ?').get(req.userId) || {};
+  res.json({ code: 0, data: { profile: serializeTasteProfile(row.taste_profile), completedAt: row.taste_completed_at || '' } });
+});
+
+app.post('/api/taste-profile', requireAuth, [
+  body('experience').optional().isArray(),
+  body('avoid').optional().isArray(),
+  body('pace').optional().isString(),
+  body('frequency').optional().isString(),
+], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const profile = bookRecommendation.deriveTasteProfile(req.body);
+  if (!profile.favoriteTags.length || !profile.frequency) {
+    return res.status(400).json({ code: 400, message: '请至少选择偏好和游玩频率' });
+  }
+  db.prepare(`
+    UPDATE profiles SET taste_profile = ?, taste_completed_at = datetime('now'), updated_at = datetime('now')
+    WHERE user_id = ?
+  `).run(JSON.stringify(profile), req.userId);
+  res.json({ code: 0, data: { profile, completedAt: new Date().toISOString() }, message: '口味画像已保存' });
 });
 
 app.get('/api/health', (req, res) => {
@@ -669,6 +857,7 @@ function createNotification({ userId, actorUserId = null, sessionId = null, type
 }
 
 function serializeProfile(row = {}) {
+  const tasteProfile = serializeTasteProfile(row.taste_profile);
   return {
     gameTypes: parseJsonArray(row.game_types),
     playStyles: parseJsonArray(row.play_styles),
@@ -680,6 +869,8 @@ function serializeProfile(row = {}) {
     playFreq: row.play_freq || '',
     intro: row.intro || '',
     city: row.city || '',
+    tasteProfile,
+    tasteTestCompleted: !!row.taste_completed_at,
   };
 }
 
@@ -1284,6 +1475,37 @@ app.post(
     } catch (error) {
       logAiUsage({ userId: req.userId, feature: 'gameGuide', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成玩法攻略失败');
+    }
+  }
+);
+
+app.post(
+  '/api/ai/script-explanation',
+  requireAuth,
+  [body('scriptId').isInt({ min: 1 }).withMessage('请选择要解释的剧本')],
+  async (req, res) => {
+    if (!requireValidation(req, res)) return;
+    if (!requireAiReady(res, 'scriptExplanation')) return;
+    if (!requireAiQuota(res, req.userId)) return;
+    const scriptId = Number(req.body.scriptId);
+    const startedAt = Date.now();
+    const input = { scriptId };
+    try {
+      const script = db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
+      if (!script) {
+        logAiUsage({ userId: req.userId, feature: 'scriptExplanation', input, outputStatus: 'not_found', startedAt });
+        return res.status(404).json({ code: 404, message: '剧本不存在' });
+      }
+      const profileRow = db.prepare('SELECT taste_profile FROM profiles WHERE user_id = ?').get(req.userId) || {};
+      const tasteProfile = serializeTasteProfile(profileRow.taste_profile);
+      const state = getScriptState(req.userId, scriptId);
+      const match = bookRecommendation.scoreBook(script, tasteProfile, state);
+      const result = await ai.generateScriptExplanation(getAiConfig(), tasteProfile, script, match.reasons);
+      logAiUsage({ userId: req.userId, feature: 'scriptExplanation', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      res.json({ code: 0, data: { explanation: result.data, reasons: match.reasons, provider: AI_PROVIDER, model: getAiModel() } });
+    } catch (error) {
+      logAiUsage({ userId: req.userId, feature: 'scriptExplanation', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      sendAiError(res, error, '生成选本说明失败');
     }
   }
 );

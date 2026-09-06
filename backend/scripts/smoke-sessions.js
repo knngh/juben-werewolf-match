@@ -760,11 +760,55 @@ async function main() {
       !aiCapabilities.data.ready ||
       !aiCapabilities.data.features.sessionDraft ||
       !aiCapabilities.data.features.matchExplanation ||
+      !aiCapabilities.data.features.scriptExplanation ||
       !aiCapabilities.data.features.reportClassification ||
       !aiCapabilities.data.features.opsSummary
     ) {
       throw new Error('AI mock capabilities should be available in smoke');
     }
+    const scriptOptions = await request('GET', '/api/options');
+    if (!scriptOptions.data.tasteQuestions || scriptOptions.data.tasteQuestions.length !== 4) {
+      throw new Error('Taste test options should expose four MVP questions');
+    }
+    const publicScripts = await request('GET', '/api/scripts');
+    if (publicScripts.data.length < 8 || publicScripts.data[0].title === undefined) {
+      throw new Error('Public script library should return seeded structured scripts');
+    }
+    const publicScriptDetail = await request('GET', `/api/scripts/${publicScripts.data[0].id}`);
+    if (!publicScriptDetail.data.highlights || !publicScriptDetail.data.warnings) {
+      throw new Error('Script detail should return highlights and warnings');
+    }
+    const taste = await request('POST', '/api/taste-profile', {
+      experience: ['硬核推理', '情感沉浸'],
+      avoid: ['怕尬'],
+      pace: '长时沉浸',
+      frequency: '高频',
+    }, creatorToken);
+    if (!taste.data.profile.favoriteTags.includes('硬核推理')) {
+      throw new Error('Taste profile should persist selected preferences');
+    }
+    const personalizedScripts = await request('GET', '/api/scripts', null, creatorToken);
+    if (!personalizedScripts.data.some((item) => item.matchScore > 0 && item.matchReasons.length > 0)) {
+      throw new Error('Script recommendations should include match score and reasons');
+    }
+    const firstScriptId = personalizedScripts.data[0].id;
+    const aiScriptExplanation = await request('POST', '/api/ai/script-explanation', {
+      scriptId: firstScriptId,
+    }, creatorToken);
+    if (!aiScriptExplanation.data.explanation || !Array.isArray(aiScriptExplanation.data.reasons)) {
+      throw new Error('AI script explanation should return explanation and rule reasons');
+    }
+    await request('POST', `/api/scripts/${firstScriptId}/action`, { action: 'save' }, creatorToken);
+    const savedScript = await request('GET', `/api/scripts/${firstScriptId}`, null, creatorToken);
+    if (!savedScript.data.saved) {
+      throw new Error('Script save action should persist');
+    }
+    await request('POST', `/api/scripts/${firstScriptId}/action`, { action: 'dismiss' }, creatorToken);
+    const afterDismiss = await request('GET', '/api/scripts', null, creatorToken);
+    if (afterDismiss.data.some((item) => item.id === firstScriptId)) {
+      throw new Error('Dismissed script should leave recommendation list');
+    }
+    await request('POST', `/api/scripts/${firstScriptId}/action`, { action: 'restore' }, creatorToken);
     const aiDraft = await request('POST', '/api/ai/session-draft', {
       prompt: '周五晚上海静安新手友好狼人杀，最好准时不鸽',
     }, creatorToken);
