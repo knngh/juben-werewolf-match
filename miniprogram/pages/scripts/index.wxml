@@ -7,6 +7,17 @@
     <button class="btn btn-secondary btn-small" bindtap="goTasteTest">{{tasteCompleted ? '重测口味' : '测口味'}}</button>
   </view>
 
+  <view class="hero-panel">
+    <view class="hero-topline"><text class="hero-kicker">JUBEN / PICK</text><text class="hero-count">{{resultCountText}}</text></view>
+    <text class="hero-title">{{heroTitle}}</text>
+    <text class="hero-desc">{{heroDesc}}</text>
+    <view class="hero-metrics">
+      <view class="metric"><text class="metric-value">{{highMatchCount}}</text><text class="metric-label">高匹配</text></view>
+      <view class="metric"><text class="metric-value">{{savedCount}}</text><text class="metric-label">已收藏</text></view>
+      <view class="metric"><text class="metric-value">{{resultCountText}}</text><text class="metric-label">本次候选</text></view>
+    </view>
+  </view>
+
   <view wx:if="{{!loggedIn || !tasteCompleted}}" class="taste-banner">
     <view class="taste-copy">
       <text class="taste-title">{{loggedIn ? '还差一步，解锁匹配度' : '3 分钟找到更适合你的本'}}</text>
@@ -37,6 +48,7 @@
     <text class="empty-hint">换个关键词或筛选条件再试试</text>
   </view>
   <view wx:else class="script-list">
+    <view class="list-heading"><view><text class="list-title">推荐清单</text><text class="list-subtitle">先看匹配度，再决定要不要深入了解</text></view><text class="list-count">{{resultCountText}}</text></view>
     <view wx:for="{{scripts}}" wx:key="id" class="script-card" data-id="{{item.id}}" bindtap="goDetail">
       <view class="script-head">
         <view class="type-line">
@@ -65,11 +77,11 @@
       <view class="signal-grid">
         <view class="signal-block">
           <text class="signal-label">核心亮点</text>
-          <text class="signal-text">{{item.highlights[0] || '查看详情了解亮点'}}</text>
+          <text class="signal-text">{{item.highlightText}}</text>
         </view>
         <view class="signal-block warning-block">
           <text class="signal-label warning-label">先看雷点</text>
-          <text class="signal-text">{{item.warnings[0] || '暂无明显雷点'}}</text>
+          <text class="signal-text">{{item.warningText}}</text>
         </view>
       </view>
 

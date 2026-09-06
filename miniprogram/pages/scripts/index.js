@@ -26,6 +26,8 @@ function enrichScript(item) {
     matchScoreText: scoreVisible ? item.matchScore + '%' : '',
     matchLevel: scoreVisible ? matchLevel(item.matchScore) : '',
     primaryReason: item.matchReasons && item.matchReasons.length ? item.matchReasons[0] : '',
+    highlightText: item.highlights && item.highlights.length ? item.highlights[0] : '查看详情了解亮点',
+    warningText: item.warnings && item.warnings.length ? item.warnings[0] : '暂无明显雷点',
   });
 }
 
@@ -34,6 +36,11 @@ Page({
     loading: true,
     loggedIn: false,
     tasteCompleted: false,
+    heroTitle: '从不踩雷开始选本',
+    heroDesc: '先看亮点，再看雷点，把“今天玩什么”变成一个更轻松的决定。',
+    resultCountText: '8 本候选',
+    savedCount: 0,
+    highMatchCount: 0,
     scripts: [],
     filters: {
       q: '',
@@ -83,11 +90,18 @@ Page({
       const next = { loading: false };
       if (scriptsRes.code === 0 && Array.isArray(scriptsRes.data)) {
         next.scripts = scriptsRes.data.map(enrichScript);
+        next.resultCountText = next.scripts.length + ' 本候选';
+        next.savedCount = next.scripts.filter((item) => item.saved).length;
+        next.highMatchCount = next.scripts.filter((item) => item.matchScore >= 80).length;
       } else {
         next.scripts = [];
         wx.showToast({ title: scriptsRes.message || '剧本库加载失败', icon: 'none' });
       }
       next.tasteCompleted = !!(tasteRes.code === 0 && tasteRes.data && tasteRes.data.completedAt);
+      next.heroTitle = next.tasteCompleted ? '你的下一本，已经排好' : '从不踩雷开始选本';
+      next.heroDesc = next.tasteCompleted
+        ? '推荐会结合你的偏好、雷点和游玩频率动态排序。'
+        : '先看亮点，再看雷点，把“今天玩什么”变成一个更轻松的决定。';
       this.setData(next);
     });
   },
@@ -147,6 +161,7 @@ Page({
         scripts: this.data.scripts.map((item) => item.id === id
           ? Object.assign({}, item, { saved: !saved })
           : item),
+        savedCount: Math.max(0, this.data.savedCount + (saved ? -1 : 1)),
       });
       wx.showToast({ title: saved ? '已取消收藏' : '已收藏', icon: 'success' });
     });

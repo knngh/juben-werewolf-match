@@ -19,29 +19,23 @@ const projectConfig = readJson('project.config.json');
 
 assert(Array.isArray(appJson.pages) && appJson.pages.length > 0, 'app.json pages 不能为空');
 assert(appJson.pages[0] === 'pages/scripts/index', '首屏应为智能选本页');
+assert(appJson.pages.length === 5, 'MVP 首发页面应只保留选本、测试、详情、我的和登录');
 assert(Array.isArray(appJson.tabBar && appJson.tabBar.list), 'tabBar 配置缺失');
 
 const tabPages = new Set(appJson.tabBar.list.map((item) => item.pagePath));
 [
   'pages/scripts/index',
-  'pages/sessions/index',
-  'pages/discover/index',
   'pages/profile/index',
 ].forEach((page) => assert(tabPages.has(page), `tabBar 缺少 ${page}`));
+assert(!tabPages.has('pages/matches/index'), '匹配不应出现在 MVP 底部导航');
+assert(!tabPages.has('pages/discover/index'), '发现不应出现在 MVP 底部导航');
 
 [
   'pages/login/index',
   'pages/scripts/index',
   'pages/taste-test/index',
   'pages/script-detail/index',
-  'pages/sessions/index',
-  'pages/create-session/index',
-  'pages/session-detail/index',
-  'pages/my/index',
   'pages/profile/index',
-  'pages/notifications/index',
-  'pages/discover/index',
-  'pages/matches/index',
 ].forEach((page) => {
   assert(appJson.pages.includes(page), `app.json 未注册 ${page}`);
   ['.js', '.json', '.wxml', '.wxss'].forEach((ext) => {

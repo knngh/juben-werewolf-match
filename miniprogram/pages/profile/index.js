@@ -253,28 +253,12 @@ Page({
     wx.navigateTo({ url: '/pages/login/index' });
   },
 
-  goNotifications() {
-    wx.navigateTo({ url: '/pages/notifications/index' });
-  },
-
-  goMySessions() {
-    wx.navigateTo({ url: '/pages/my/index' });
-  },
-
   goTasteTest() {
     if (!api.getToken()) {
       this.goLogin();
       return;
     }
     wx.navigateTo({ url: '/pages/taste-test/index' });
-  },
-
-  goDiscover() {
-    wx.switchTab({ url: '/pages/discover/index' });
-  },
-
-  goMatches() {
-    wx.navigateTo({ url: '/pages/matches/index' });
   },
 
   logout() {

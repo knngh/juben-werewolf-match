@@ -2,9 +2,8 @@
   <view class="toolbar">
     <view>
       <text class="title">我的资料</text>
-      <text class="subtitle">完善偏好后，找局和推荐会更准</text>
+      <text class="subtitle">完善偏好后，选本推荐会更准</text>
     </view>
-    <button wx:if="{{loggedIn}}" class="btn btn-secondary btn-small" bindtap="goNotifications">通知</button>
   </view>
 
   <view wx:if="{{!loggedIn}}" class="card login-card">
@@ -17,10 +16,6 @@
   <view wx:else>
     <view class="quick-nav">
       <button class="quick-nav-item" bindtap="goTasteTest"><text class="quick-nav-title">口味测试</text><text class="quick-nav-hint">更新选本偏好</text></button>
-      <button class="quick-nav-item" bindtap="goMySessions"><text class="quick-nav-title">我的局</text><text class="quick-nav-hint">发布与申请</text></button>
-      <button class="quick-nav-item" bindtap="goDiscover"><text class="quick-nav-title">发现</text><text class="quick-nav-hint">找同好</text></button>
-      <button class="quick-nav-item" bindtap="goMatches"><text class="quick-nav-title">匹配</text><text class="quick-nav-hint">互相喜欢</text></button>
-      <button class="quick-nav-item" bindtap="goNotifications"><text class="quick-nav-title">通知</text><text class="quick-nav-hint">申请与审批</text></button>
     </view>
     <view class="card completion-card">
       <view class="completion-head">
@@ -29,25 +24,6 @@
       </view>
       <view class="progress"><view style="width: {{completeness.score}}%;"></view></view>
       <text class="hint">{{missingText || '资料已完整'}}</text>
-    </view>
-
-    <view class="card notify-card">
-      <view class="notify-head">
-        <text class="section-title">提醒设置</text>
-        <button class="btn btn-secondary btn-small" loading="{{subscribeLoading}}" bindtap="requestWechatSubscribe">微信订阅</button>
-      </view>
-      <view class="switch-row">
-        <text>新申请提醒</text>
-        <switch checked="{{notificationPrefs.requestUpdates}}" data-field="requestUpdates" bindchange="onNotificationSwitch" />
-      </view>
-      <view class="switch-row">
-        <text>审批结果提醒</text>
-        <switch checked="{{notificationPrefs.reviewResults}}" data-field="reviewResults" bindchange="onNotificationSwitch" />
-      </view>
-      <view class="switch-row">
-        <text>局状态提醒</text>
-        <switch checked="{{notificationPrefs.sessionStatus}}" data-field="sessionStatus" bindchange="onNotificationSwitch" />
-      </view>
     </view>
 
     <view class="card profile-card">

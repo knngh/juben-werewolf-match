@@ -809,6 +809,10 @@ async function main() {
       throw new Error('Dismissed script should leave recommendation list');
     }
     await request('POST', `/api/scripts/${firstScriptId}/action`, { action: 'restore' }, creatorToken);
+    const afterRestore = await request('GET', '/api/scripts', null, creatorToken);
+    if (!afterRestore.data.some((item) => item.id === firstScriptId)) {
+      throw new Error('Restored script should return to recommendation list');
+    }
     const aiDraft = await request('POST', '/api/ai/session-draft', {
       prompt: '周五晚上海静安新手友好狼人杀，最好准时不鸽',
     }, creatorToken);
