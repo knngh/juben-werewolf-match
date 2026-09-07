@@ -1,5 +1,7 @@
 const TAB_PAGES = [
   'pages/scripts/index',
+  'pages/tools/index',
+  'pages/archive/index',
   'pages/profile/index',
 ];
 

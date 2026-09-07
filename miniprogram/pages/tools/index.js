@@ -39,6 +39,11 @@ Page({
     scriptId: 0,
     selectedScript: null,
     activeTab: 'timer',
+    aiLoading: false,
+    aiPrep: null,
+    aiCoach: null,
+    aiRecap: null,
+    coachQuestion: '',
     noteCategories: NOTE_CATEGORIES,
     noteCategory: NOTE_CATEGORIES[0],
     notes: [],
@@ -70,6 +75,26 @@ Page({
       return;
     }
     this.pendingScriptId = Number(query.id) || 0;
+    this.load();
+  },
+
+  onShow() {
+    if (!api.getToken()) return;
+    const requestedScriptId = Number(wx.getStorageSync('jwm_tools_script_id')) || 0;
+    if (!requestedScriptId) return;
+    wx.removeStorageSync('jwm_tools_script_id');
+    this.pendingScriptId = requestedScriptId;
+    if (this.data.scripts.length) {
+      const selectedScript = this.data.scripts.find((item) => item.id === requestedScriptId);
+      if (selectedScript) {
+        this.stopTimer();
+        this.setData({ scriptId: selectedScript.id, selectedScript });
+        this.loadNotes();
+        this.resetTimer();
+        this.pendingScriptId = 0;
+        return;
+      }
+    }
     this.load();
   },
 
@@ -138,6 +163,49 @@ Page({
   switchTab(event) {
     const activeTab = event.currentTarget.dataset.tab;
     this.setData({ activeTab });
+  },
+
+  onCoachQuestion(event) {
+    this.setData({ coachQuestion: event.detail.value });
+  },
+
+  runAiRequest(endpoint, payload, field, successTitle) {
+    if (!this.data.scriptId) {
+      wx.showToast({ title: '请先选择剧本', icon: 'none' });
+      return;
+    }
+    this.setData({ aiLoading: true });
+    api.post(endpoint, payload).then((res) => {
+      this.setData({ aiLoading: false });
+      if (res.code !== 0) {
+        wx.showToast({ title: res.message || 'AI 暂时不可用', icon: 'none' });
+        return;
+      }
+      this.setData({ [field]: res.data && res.data[field.replace('ai', '').toLowerCase()] || res.data });
+      if (successTitle) wx.showToast({ title: successTitle, icon: 'success' });
+    });
+  },
+
+  generatePlayPrep() {
+    this.runAiRequest('/api/ai/play-prep', { scriptId: this.data.scriptId }, 'aiPrep', '准备清单已生成');
+  },
+
+  generateStuckCoach() {
+    this.runAiRequest('/api/ai/stuck-coach', {
+      scriptId: this.data.scriptId,
+      question: this.data.coachQuestion,
+      notes: this.data.notes,
+    }, 'aiCoach', '卡点梳理已生成');
+  },
+
+  generatePlayRecap() {
+    this.runAiRequest('/api/ai/play-recap', {
+      scriptId: this.data.scriptId,
+      role: this.data.recordForm.role,
+      rating: this.data.recordForm.rating,
+      note: this.data.recordForm.note,
+      notes: this.data.notes,
+    }, 'aiRecap', '复盘摘要已生成');
   },
 
   selectSegment(event) {

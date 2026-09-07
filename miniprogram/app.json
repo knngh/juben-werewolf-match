@@ -22,11 +22,27 @@
     "list": [
       {
         "pagePath": "pages/scripts/index",
-        "text": "选本"
+        "text": "选本",
+        "iconPath": "assets/tab-scripts.png",
+        "selectedIconPath": "assets/tab-scripts-active.png"
+      },
+      {
+        "pagePath": "pages/tools/index",
+        "text": "工具",
+        "iconPath": "assets/tab-tools.png",
+        "selectedIconPath": "assets/tab-tools-active.png"
+      },
+      {
+        "pagePath": "pages/archive/index",
+        "text": "档案",
+        "iconPath": "assets/tab-archive.png",
+        "selectedIconPath": "assets/tab-archive-active.png"
       },
       {
         "pagePath": "pages/profile/index",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "assets/tab-profile.png",
+        "selectedIconPath": "assets/tab-profile-active.png"
       }
     ]
   },

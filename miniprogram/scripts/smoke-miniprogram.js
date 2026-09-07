@@ -26,8 +26,16 @@ assert(Array.isArray(appJson.tabBar && appJson.tabBar.list), 'tabBar 配置缺�
 const tabPages = new Set(appJson.tabBar.list.map((item) => item.pagePath));
 [
   'pages/scripts/index',
+  'pages/tools/index',
+  'pages/archive/index',
   'pages/profile/index',
 ].forEach((page) => assert(tabPages.has(page), `tabBar 缺少 ${page}`));
+assert(appJson.tabBar.list.length === 4, 'MVP 底部导航应只保留选本、工具、档案、我的');
+appJson.tabBar.list.forEach((item) => {
+  assert(item.iconPath && item.selectedIconPath, `${item.text} tab 缺少图标配置`);
+  assert(fs.existsSync(path.join(root, item.iconPath)), `${item.text} tab 默认图标不存在`);
+  assert(fs.existsSync(path.join(root, item.selectedIconPath)), `${item.text} tab 选中图标不存在`);
+});
 assert(!tabPages.has('pages/matches/index'), '匹配不应出现在 MVP 底部导航');
 assert(!tabPages.has('pages/discover/index'), '发现不应出现在 MVP 底部导航');
 
@@ -50,6 +58,8 @@ assert(!tabPages.has('pages/discover/index'), '发现不应出现在 MVP 底部�
 const apiSource = fs.readFileSync(path.join(root, 'utils/api.js'), 'utf8');
 assert(apiSource.includes('Authorization'), 'API 请求应携带 Authorization');
 assert(apiSource.includes('wx.request'), 'API 请求应使用 wx.request');
+assert(apiSource.includes('timeout: 12000'), 'API 请求应设置 12 秒超时，避免页面无限等待');
+assert(apiSource.includes('errorType,'), 'API 请求应返回可识别的超时类型');
 
 const configSource = fs.readFileSync(path.join(root, 'config.js'), 'utf8');
 assert(!configSource.includes('TIANDITU'), '小程序端不能包含天地图 Key');
@@ -93,12 +103,17 @@ const scriptDetailSource = fs.readFileSync(path.join(root, 'pages/script-detail/
 assert(scriptDetailSource.includes('/api/scripts/'), '剧本详情页应接入详情接口');
 assert(scriptDetailSource.includes('/api/ai/script-explanation'), '剧本详情页应接入 AI 推荐解释');
 assert(scriptDetailSource.includes('loginUrlWithRedirect'), '剧本详情页未登录互动应带回跳地址');
-assert(scriptDetailSource.includes('/pages/tools/index?id='), '剧本详情页应能进入打本工具');
+assert(scriptDetailSource.includes("wx.switchTab({ url: '/pages/tools/index' })"), '剧本详情页进入工具应使用 switchTab');
+assert(scriptDetailSource.includes('jwm_tools_script_id'), '剧本详情页进入工具应传递剧本上下文');
 
 const toolsSource = fs.readFileSync(path.join(root, 'pages/tools/index.js'), 'utf8');
 assert(toolsSource.includes('/api/play-records'), '打本工具应接入打卡记录接口');
 assert(toolsSource.includes('/api/scripts/' + "' + this.data.scriptId + '" + '/notes'), '打本工具应接入结构化笔记接口');
 assert(toolsSource.includes('setInterval'), '打本工具应支持分幕计时');
+assert(toolsSource.includes('onShow'), 'Tab 工具页应支持从剧本详情恢复上下文');
+assert(toolsSource.includes('/api/ai/play-prep'), '打本工具应接入 AI 开场准备');
+assert(toolsSource.includes('/api/ai/stuck-coach'), '打本工具应接入 AI 卡点教练');
+assert(toolsSource.includes('/api/ai/play-recap'), '打本工具应接入 AI 打后复盘');
 
 const archiveSource = fs.readFileSync(path.join(root, 'pages/archive/index.js'), 'utf8');
 assert(archiveSource.includes('/api/play-records'), '档案页应接入打本记录接口');

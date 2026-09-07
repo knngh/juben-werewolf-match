@@ -266,7 +266,7 @@ Page({
       this.goLogin();
       return;
     }
-    wx.navigateTo({ url: '/pages/tools/index' });
+    wx.switchTab({ url: '/pages/tools/index' });
   },
 
   goArchive() {
@@ -274,7 +274,7 @@ Page({
       this.goLogin();
       return;
     }
-    wx.navigateTo({ url: '/pages/archive/index' });
+    wx.switchTab({ url: '/pages/archive/index' });
   },
 
   logout() {

@@ -105,7 +105,8 @@ Page({
 
   startPlaying() {
     if (!this.requireLogin()) return;
-    wx.navigateTo({ url: '/pages/tools/index?id=' + this.data.scriptId });
+    wx.setStorageSync('jwm_tools_script_id', this.data.scriptId);
+    wx.switchTab({ url: '/pages/tools/index' });
   },
 
   onShareAppMessage() {

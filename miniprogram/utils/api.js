@@ -19,6 +19,7 @@ function request(method, url, data) {
       method,
       data: data || {},
       header: headers,
+      timeout: 12000,
       success(res) {
         const payload = res.data || {};
         if (res.statusCode === 401) {
@@ -31,11 +32,15 @@ function request(method, url, data) {
         }
         resolve(Object.assign({ status: res.statusCode }, payload));
       },
-      fail() {
+      fail(error) {
+        const errorType = error && (error.errMsg || '').toLowerCase().includes('timeout')
+          ? 'timeout'
+          : 'network';
         resolve({
           code: 500,
           status: 0,
-          message: '网络连接失败',
+          errorType,
+          message: errorType === 'timeout' ? '请求超时，请确认本地服务已启动' : '网络连接失败，请检查 API 地址',
         });
       },
     });

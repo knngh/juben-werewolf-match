@@ -761,6 +761,9 @@ async function main() {
       !aiCapabilities.data.features.sessionDraft ||
       !aiCapabilities.data.features.matchExplanation ||
       !aiCapabilities.data.features.scriptExplanation ||
+      !aiCapabilities.data.features.playPrep ||
+      !aiCapabilities.data.features.stuckCoach ||
+      !aiCapabilities.data.features.playRecap ||
       !aiCapabilities.data.features.reportClassification ||
       !aiCapabilities.data.features.opsSummary
     ) {
@@ -843,6 +846,45 @@ async function main() {
     const records = await request('GET', '/api/play-records', null, creatorToken);
     if (records.data.summary.total !== 1 || records.data.records[0].scriptTitle === '') {
       throw new Error('Play records should return archive summary and script title');
+    }
+    const playPrep = await request('POST', '/api/ai/play-prep', {
+      scriptId: firstScriptId,
+    }, creatorToken);
+    if (
+      !playPrep.data.prep ||
+      !playPrep.data.prep.summary ||
+      !Array.isArray(playPrep.data.prep.checklist) ||
+      !Array.isArray(playPrep.data.prep.focusPoints)
+    ) {
+      throw new Error('AI play prep should return structured checklist and focus points');
+    }
+    const stuckCoach = await request('POST', '/api/ai/stuck-coach', {
+      scriptId: firstScriptId,
+      question: '我们卡在第二幕时间线，应该先核对什么？',
+      notes: [{ category: '疑点', content: '第二幕出现的时间差需要回看。' }],
+    }, creatorToken);
+    if (
+      !stuckCoach.data.coach ||
+      !stuckCoach.data.coach.summary ||
+      !Array.isArray(stuckCoach.data.coach.nextSteps) ||
+      !Array.isArray(stuckCoach.data.coach.questions)
+    ) {
+      throw new Error('AI stuck coach should return structured next steps and questions');
+    }
+    const playRecap = await request('POST', '/api/ai/play-recap', {
+      scriptId: firstScriptId,
+      role: '侦探',
+      rating: 5,
+      note: '节奏很稳，复盘时线索很有意思。',
+      notes: [{ category: '线索卡', content: '第二幕的时间差是关键。' }],
+    }, creatorToken);
+    if (
+      !playRecap.data.recap ||
+      !playRecap.data.recap.summary ||
+      !Array.isArray(playRecap.data.recap.highlights) ||
+      !Array.isArray(playRecap.data.recap.nextTime)
+    ) {
+      throw new Error('AI play recap should return structured highlights and next time advice');
     }
     const aiDraft = await request('POST', '/api/ai/session-draft', {
       prompt: '周五晚上海静安新手友好狼人杀，最好准时不鸽',

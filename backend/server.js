@@ -474,6 +474,30 @@ function normalizeText(value, maxLength = 80) {
   return String(value || '').trim().slice(0, maxLength);
 }
 
+function normalizeAiNotes(notes) {
+  if (!Array.isArray(notes)) return [];
+  return notes.slice(0, 12).map((note) => ({
+    category: normalizeText(note && note.category, 20),
+    title: normalizeText(note && note.title, 60),
+    content: normalizeText(note && note.content, 300),
+  })).filter((note) => note.content);
+}
+
+function getScriptForAi(scriptId) {
+  return db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
+}
+
+function getOwnedScriptNotesForAi(userId, scriptId) {
+  const rows = db.prepare(`
+    SELECT category, title, content
+    FROM script_notes
+    WHERE user_id = ? AND script_id = ?
+    ORDER BY created_at DESC, id DESC
+    LIMIT 12
+  `).all(userId, scriptId);
+  return normalizeAiNotes(rows);
+}
+
 function normalizeCityName(value) {
   return normalizeText(value, 20).replace(/市$/, '');
 }
@@ -1621,6 +1645,105 @@ app.post(
     } catch (error) {
       logAiUsage({ userId: req.userId, feature: 'scriptExplanation', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成选本说明失败');
+    }
+  }
+);
+
+app.post(
+  '/api/ai/play-prep',
+  requireAuth,
+  [body('scriptId').isInt({ min: 1 }).withMessage('请选择要准备的剧本')],
+  async (req, res) => {
+    if (!requireValidation(req, res)) return;
+    if (!requireAiReady(res, 'playPrep')) return;
+    if (!requireAiQuota(res, req.userId)) return;
+    const scriptId = Number(req.body.scriptId);
+    const startedAt = Date.now();
+    const input = { scriptId };
+    try {
+      const script = getScriptForAi(scriptId);
+      if (!script) {
+        logAiUsage({ userId: req.userId, feature: 'playPrep', input, outputStatus: 'not_found', startedAt });
+        return res.status(404).json({ code: 404, message: '剧本不存在' });
+      }
+      const result = await ai.generatePlayPrep(getAiConfig(), script);
+      logAiUsage({ userId: req.userId, feature: 'playPrep', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      res.json({ code: 0, data: { prep: result.data, provider: AI_PROVIDER, model: getAiModel() } });
+    } catch (error) {
+      logAiUsage({ userId: req.userId, feature: 'playPrep', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      sendAiError(res, error, '生成开场准备失败');
+    }
+  }
+);
+
+app.post(
+  '/api/ai/stuck-coach',
+  requireAuth,
+  [
+    body('scriptId').isInt({ min: 1 }).withMessage('请选择当前剧本'),
+    body('question').optional({ checkFalsy: true }).trim().isLength({ max: 300 }).withMessage('卡点描述最多 300 字'),
+    body('notes').optional().isArray({ max: 12 }).withMessage('笔记数量无效'),
+  ],
+  async (req, res) => {
+    if (!requireValidation(req, res)) return;
+    if (!requireAiReady(res, 'stuckCoach')) return;
+    if (!requireAiQuota(res, req.userId)) return;
+    const scriptId = Number(req.body.scriptId);
+    const question = normalizeText(req.body.question, 300);
+    const notes = normalizeAiNotes(req.body.notes || getOwnedScriptNotesForAi(req.userId, scriptId));
+    const startedAt = Date.now();
+    const input = { scriptId, question, noteCount: notes.length };
+    try {
+      const script = getScriptForAi(scriptId);
+      if (!script) {
+        logAiUsage({ userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'not_found', startedAt });
+        return res.status(404).json({ code: 404, message: '剧本不存在' });
+      }
+      const result = await ai.generateStuckCoach(getAiConfig(), script, question, notes);
+      logAiUsage({ userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      res.json({ code: 0, data: { coach: result.data, provider: AI_PROVIDER, model: getAiModel() } });
+    } catch (error) {
+      logAiUsage({ userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      sendAiError(res, error, '生成卡点梳理失败');
+    }
+  }
+);
+
+app.post(
+  '/api/ai/play-recap',
+  requireAuth,
+  [
+    body('scriptId').isInt({ min: 1 }).withMessage('请选择要复盘的剧本'),
+    body('role').optional({ checkFalsy: true }).trim().isLength({ max: 80 }).withMessage('角色最多 80 字'),
+    body('rating').optional({ checkFalsy: true }).isInt({ min: 1, max: 5 }).withMessage('评分应为 1-5 分'),
+    body('note').optional({ checkFalsy: true }).trim().isLength({ max: 500 }).withMessage('短评最多 500 字'),
+    body('notes').optional().isArray({ max: 12 }).withMessage('笔记数量无效'),
+  ],
+  async (req, res) => {
+    if (!requireValidation(req, res)) return;
+    if (!requireAiReady(res, 'playRecap')) return;
+    if (!requireAiQuota(res, req.userId)) return;
+    const scriptId = Number(req.body.scriptId);
+    const record = {
+      role: normalizeText(req.body.role, 80),
+      rating: req.body.rating ? Number(req.body.rating) : 0,
+      note: normalizeText(req.body.note, 500),
+    };
+    const notes = normalizeAiNotes(req.body.notes || getOwnedScriptNotesForAi(req.userId, scriptId));
+    const startedAt = Date.now();
+    const input = { scriptId, rating: record.rating, noteLength: record.note.length, noteCount: notes.length };
+    try {
+      const script = getScriptForAi(scriptId);
+      if (!script) {
+        logAiUsage({ userId: req.userId, feature: 'playRecap', input, outputStatus: 'not_found', startedAt });
+        return res.status(404).json({ code: 404, message: '剧本不存在' });
+      }
+      const result = await ai.generatePlayRecap(getAiConfig(), script, record, notes);
+      logAiUsage({ userId: req.userId, feature: 'playRecap', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      res.json({ code: 0, data: { recap: result.data, provider: AI_PROVIDER, model: getAiModel() } });
+    } catch (error) {
+      logAiUsage({ userId: req.userId, feature: 'playRecap', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      sendAiError(res, error, '生成打后复盘失败');
     }
   }
 );

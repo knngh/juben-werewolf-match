@@ -16,6 +16,7 @@
       <button class="tool-tab {{activeTab === 'timer' ? 'tool-tab-active' : ''}}" data-tab="timer" bindtap="switchTab">计时器</button>
       <button class="tool-tab {{activeTab === 'notes' ? 'tool-tab-active' : ''}}" data-tab="notes" bindtap="switchTab">打本笔记</button>
       <button class="tool-tab {{activeTab === 'record' ? 'tool-tab-active' : ''}}" data-tab="record" bindtap="switchTab">打卡记录</button>
+      <button class="tool-tab {{activeTab === 'ai' ? 'tool-tab-active' : ''}}" data-tab="ai" bindtap="switchTab">AI 教练</button>
     </view>
 
     <view wx:if="{{activeTab === 'timer'}}" class="tool-panel">
@@ -63,6 +64,52 @@
         <button class="btn btn-primary btn-full" loading="{{savingRecord}}" bindtap="saveRecord">保存到我的档案</button>
       </view>
       <view wx:if="{{records.length}}" class="recent-records"><text class="section-title">最近记录</text><view wx:for="{{records}}" wx:key="id" class="recent-row"><view><text class="recent-title">{{item.scriptTitle}}</text><text class="recent-meta">{{item.playedAt}} · {{item.role || '未填写角色'}}</text></view><text class="recent-rating">{{item.rating}} / 5</text></view></view>
+    </view>
+
+    <view wx:elif="{{activeTab === 'ai'}}" class="tool-panel ai-panel">
+      <view class="section tool-section first-section"><text class="section-title">AI 打本教练</text><text class="section-hint">只使用剧本公开信息和你的记录，不主动剧透</text></view>
+      <view class="ai-action-list">
+        <view class="ai-action">
+          <view class="ai-action-copy"><text class="ai-action-title">开场准备</text><text class="ai-action-hint">生成规则确认、内容边界和关注重点</text></view>
+          <button class="btn btn-secondary btn-small" loading="{{aiLoading}}" bindtap="generatePlayPrep">生成</button>
+        </view>
+        <view class="ai-action">
+          <view class="ai-action-copy"><text class="ai-action-title">卡点梳理</text><text class="ai-action-hint">卡住时把问题交给 AI，按证据一步步排查</text></view>
+          <button class="btn btn-secondary btn-small" loading="{{aiLoading}}" bindtap="generateStuckCoach">梳理</button>
+        </view>
+        <view class="coach-input"><textarea class="textarea" value="{{coachQuestion}}" bindinput="onCoachQuestion" maxlength="300" placeholder="可选：描述你现在卡在哪里" /></view>
+        <view class="ai-action">
+          <view class="ai-action-copy"><text class="ai-action-title">打后复盘</text><text class="ai-action-hint">结合角色、评分和笔记，沉淀下一次选本信号</text></view>
+          <button class="btn btn-secondary btn-small" loading="{{aiLoading}}" bindtap="generatePlayRecap">生成</button>
+        </view>
+      </view>
+
+      <view wx:if="{{aiPrep}}" class="ai-result">
+        <view class="ai-result-head"><text class="ai-result-title">开场准备</text><text class="ai-result-badge">AI</text></view>
+        <text class="ai-result-summary">{{aiPrep.summary}}</text>
+        <text class="ai-list-label">确认清单</text>
+        <view wx:for="{{aiPrep.checklist}}" wx:key="*this" class="ai-list-item"><text class="ai-list-index">{{index + 1}}</text><text>{{item}}</text></view>
+        <text class="ai-list-label">关注重点</text>
+        <view wx:for="{{aiPrep.focusPoints}}" wx:key="*this" class="ai-list-item"><text class="ai-list-index">·</text><text>{{item}}</text></view>
+      </view>
+
+      <view wx:if="{{aiCoach}}" class="ai-result">
+        <view class="ai-result-head"><text class="ai-result-title">卡点梳理</text><text class="ai-result-badge">AI</text></view>
+        <text class="ai-result-summary">{{aiCoach.summary}}</text>
+        <text class="ai-list-label">下一步</text>
+        <view wx:for="{{aiCoach.nextSteps}}" wx:key="*this" class="ai-list-item"><text class="ai-list-index">{{index + 1}}</text><text>{{item}}</text></view>
+        <text class="ai-list-label">自问三个问题</text>
+        <view wx:for="{{aiCoach.questions}}" wx:key="*this" class="ai-list-item"><text class="ai-list-index">?</text><text>{{item}}</text></view>
+      </view>
+
+      <view wx:if="{{aiRecap}}" class="ai-result">
+        <view class="ai-result-head"><text class="ai-result-title">打后复盘</text><text class="ai-result-badge">AI</text></view>
+        <text class="ai-result-summary">{{aiRecap.summary}}</text>
+        <text class="ai-list-label">本次亮点</text>
+        <view wx:for="{{aiRecap.highlights}}" wx:key="*this" class="ai-list-item"><text class="ai-list-index">·</text><text>{{item}}</text></view>
+        <text class="ai-list-label">下次可以</text>
+        <view wx:for="{{aiRecap.nextTime}}" wx:key="*this" class="ai-list-item"><text class="ai-list-index">→</text><text>{{item}}</text></view>
+      </view>
     </view>
   </view>
 </view>

@@ -1,4 +1,15 @@
-const AI_FEATURE_KEYS = ['sessionDraft', 'requestMessage', 'matchExplanation', 'gameGuide', 'scriptExplanation', 'reportClassification', 'opsSummary'];
+const AI_FEATURE_KEYS = [
+  'sessionDraft',
+  'requestMessage',
+  'matchExplanation',
+  'gameGuide',
+  'scriptExplanation',
+  'playPrep',
+  'stuckCoach',
+  'playRecap',
+  'reportClassification',
+  'opsSummary',
+];
 const AI_PROVIDER_FEATURES = {
   mock: {
     sessionDraft: true,
@@ -6,6 +17,9 @@ const AI_PROVIDER_FEATURES = {
     matchExplanation: true,
     gameGuide: true,
     scriptExplanation: true,
+    playPrep: true,
+    stuckCoach: true,
+    playRecap: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -15,6 +29,9 @@ const AI_PROVIDER_FEATURES = {
     matchExplanation: true,
     gameGuide: true,
     scriptExplanation: true,
+    playPrep: true,
+    stuckCoach: true,
+    playRecap: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -24,6 +41,9 @@ const AI_PROVIDER_FEATURES = {
     matchExplanation: true,
     gameGuide: true,
     scriptExplanation: true,
+    playPrep: true,
+    stuckCoach: true,
+    playRecap: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -33,6 +53,9 @@ const AI_PROVIDER_FEATURES = {
     matchExplanation: true,
     gameGuide: true,
     scriptExplanation: true,
+    playPrep: true,
+    stuckCoach: true,
+    playRecap: true,
     reportClassification: true,
     opsSummary: true,
   },
@@ -337,6 +360,127 @@ function normalizeAiGameGuide(guide = {}, session = {}) {
   };
 }
 
+function normalizeAiList(values, maxItems = 5, maxLength = 80) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => normalizeText(value, maxLength))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function scriptPublicContext(script = {}) {
+  return {
+    title: normalizeText(script.title, 40),
+    gameType: normalizeText(script.game_type || script.gameType, 20),
+    difficulty: normalizeText(script.difficulty, 20),
+    durationMin: normalizeInteger(script.duration_min || script.durationMin, 1, 600, 120),
+    tags: normalizeTags(Array.isArray(script.tags) ? script.tags : parseJsonArray(script.tags)),
+    highlights: normalizeAiList(Array.isArray(script.highlights) ? script.highlights : parseJsonArray(script.highlights), 5, 80),
+    warnings: normalizeAiList(Array.isArray(script.warnings) ? script.warnings : parseJsonArray(script.warnings), 5, 80),
+  };
+}
+
+function normalizeUserNotes(notes = []) {
+  if (!Array.isArray(notes)) return [];
+  return notes.slice(0, 12).map((note) => ({
+    category: normalizeText(note && note.category, 20),
+    title: normalizeText(note && note.title, 60),
+    content: normalizeText(note && note.content, 300),
+  })).filter((note) => note.content);
+}
+
+function buildMockPlayPrep(script = {}) {
+  const context = scriptPublicContext(script);
+  const title = context.title || '这本剧本';
+  const type = context.gameType || '剧本杀';
+  const checklist = [
+    `确认${context.durationMin}分钟时长和角色人数`,
+    '先读懂自己的角色目标，再开始讨论',
+    '提前约定不剧透、轮流发言和休息规则',
+  ];
+  if (context.warnings.length) checklist.push(`留意内容提示：${context.warnings[0]}`);
+  const focusPoints = [
+    context.highlights[0] ? `重点体验：${context.highlights[0]}` : `关注${type}的节奏变化`,
+    context.tags.length ? `留意标签：${context.tags.slice(0, 2).join('、')}` : '记录每一幕出现的新信息',
+    '遇到分歧先记录证据，不急着下结论',
+  ];
+  return {
+    summary: `${title}适合在开场前先对齐规则和体验边界，过程中把关键线索记下来，复盘会更顺畅。`,
+    checklist: normalizeAiList(checklist),
+    focusPoints: normalizeAiList(focusPoints, 4),
+  };
+}
+
+function normalizeAiPlayPrep(prep = {}, script = {}) {
+  const fallback = buildMockPlayPrep(script);
+  return {
+    summary: normalizeAiTextOutput(prep.summary, 180, fallback.summary),
+    checklist: normalizeAiList(prep.checklist).length ? normalizeAiList(prep.checklist) : fallback.checklist,
+    focusPoints: normalizeAiList(prep.focusPoints, 4).length ? normalizeAiList(prep.focusPoints, 4) : fallback.focusPoints,
+  };
+}
+
+function buildMockStuckCoach(script = {}, question = '', notes = []) {
+  const context = scriptPublicContext(script);
+  const noteCount = normalizeUserNotes(notes).length;
+  const focus = context.gameType === '狼人杀' || context.gameType === '血染钟楼'
+    ? '先把每个人明确说过的信息按轮次对齐，再区分事实和推测。'
+    : '先把已经确认的事实、仍有疑问的线索和时间顺序分开。';
+  return {
+    summary: `${question ? `你提到“${normalizeText(question, 80)}”。` : ''}${focus}${noteCount ? `已参考你记录的 ${noteCount} 条笔记。` : ''}`,
+    nextSteps: [
+      '用一句话写下当前卡点，不要同时处理多个问题',
+      '从笔记里找出两条可验证的线索或发言',
+      '和队友确认下一步只验证一个假设',
+    ],
+    questions: [
+      '这是已确认事实，还是目前的推断？',
+      '哪条线索能最快排除一个可能？',
+      '是否有一段发言或时间点还没有记录？',
+    ],
+  };
+}
+
+function normalizeAiStuckCoach(coach = {}, script = {}, question = '', notes = []) {
+  const fallback = buildMockStuckCoach(script, question, notes);
+  return {
+    summary: normalizeAiTextOutput(coach.summary, 220, fallback.summary),
+    nextSteps: normalizeAiList(coach.nextSteps, 4).length ? normalizeAiList(coach.nextSteps, 4) : fallback.nextSteps,
+    questions: normalizeAiList(coach.questions, 4).length ? normalizeAiList(coach.questions, 4) : fallback.questions,
+  };
+}
+
+function buildMockPlayRecap(script = {}, record = {}, notes = []) {
+  const context = scriptPublicContext(script);
+  const rating = Number(record.rating);
+  const ratingText = rating >= 4 ? '整体体验偏好' : rating > 0 && rating <= 2 ? '整体体验有改进空间' : '这次体验信息值得继续积累';
+  const note = normalizeText(record.note, 100);
+  const highlights = [
+    `${context.title || '本次打本'}：${ratingText}`,
+    record.role ? `本次角色：${normalizeText(record.role, 40)}` : '下次可以补充角色信息，帮助推荐更精准',
+    normalizeUserNotes(notes).length ? `留下了 ${normalizeUserNotes(notes).length} 条结构化笔记` : '还可以在关键幕记录一条线索',
+  ];
+  if (note) highlights.push(`你的短评：${note}`);
+  return {
+    summary: `${context.title || '这次打本'}的复盘已整理。把喜欢的点和卡住的地方带到下一次，推荐会逐渐更贴近你。`,
+    highlights: normalizeAiList(highlights, 5, 120),
+    nextTime: [
+      '开场前先确认时长、人数和内容提示',
+      '在卡点出现时记录当时的证据，而不是只记结论',
+      '下次选本可优先保留你评分较高的类型标签',
+    ],
+  };
+}
+
+function normalizeAiPlayRecap(recap = {}, script = {}, record = {}, notes = []) {
+  const fallback = buildMockPlayRecap(script, record, notes);
+  return {
+    summary: normalizeAiTextOutput(recap.summary, 220, fallback.summary),
+    highlights: normalizeAiList(recap.highlights, 5, 120).length ? normalizeAiList(recap.highlights, 5, 120) : fallback.highlights,
+    nextTime: normalizeAiList(recap.nextTime, 4).length ? normalizeAiList(recap.nextTime, 4) : fallback.nextTime,
+  };
+}
+
 function buildMockReportClassification(input = {}, options = {}) {
   const reportReasons = options.reportReasons || [];
   const reason = reportReasons.includes(input.reason) ? input.reason : '';
@@ -530,6 +674,30 @@ function buildGameGuideSchema() {
     tips: { type: 'array', items: textSchema(60), maxItems: 4 },
     checklist: { type: 'array', items: textSchema(60), maxItems: 4 },
   }, ['gameType', 'summary', 'tips', 'checklist']);
+}
+
+function buildPlayPrepSchema() {
+  return buildJsonSchema('play_prep', {
+    summary: textSchema(180),
+    checklist: { type: 'array', items: textSchema(80), maxItems: 5 },
+    focusPoints: { type: 'array', items: textSchema(80), maxItems: 4 },
+  }, ['summary', 'checklist', 'focusPoints']);
+}
+
+function buildStuckCoachSchema() {
+  return buildJsonSchema('stuck_coach', {
+    summary: textSchema(220),
+    nextSteps: { type: 'array', items: textSchema(80), maxItems: 4 },
+    questions: { type: 'array', items: textSchema(80), maxItems: 4 },
+  }, ['summary', 'nextSteps', 'questions']);
+}
+
+function buildPlayRecapSchema() {
+  return buildJsonSchema('play_recap', {
+    summary: textSchema(220),
+    highlights: { type: 'array', items: textSchema(120), maxItems: 5 },
+    nextTime: { type: 'array', items: textSchema(80), maxItems: 4 },
+  }, ['summary', 'highlights', 'nextTime']);
 }
 
 function buildTextObjectSchema(name, field, maxLength) {
@@ -864,6 +1032,69 @@ async function generateGameGuide(config, session = {}) {
   return createAiResult(normalizeAiGameGuide(result.data, session), result.meta);
 }
 
+async function generatePlayPrep(config, script = {}) {
+  if (config.provider === 'mock') {
+    return createAiResult(normalizeAiPlayPrep(buildMockPlayPrep(script), script));
+  }
+  const result = await callChatCompletionsJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: '为剧本杀或桌游生成开场前准备清单和无剧透关注点，帮助玩家顺利开始，不输出剧情真相。',
+        script: scriptPublicContext(script),
+      }),
+    },
+  ], buildPlayPrepSchema());
+  return createAiResult(normalizeAiPlayPrep(result.data, script), result.meta);
+}
+
+async function generateStuckCoach(config, script = {}, question = '', notes = []) {
+  const normalizedQuestion = normalizeText(question, 300);
+  const normalizedNotes = normalizeUserNotes(notes);
+  if (config.provider === 'mock') {
+    return createAiResult(normalizeAiStuckCoach(buildMockStuckCoach(script, normalizedQuestion, normalizedNotes), script, normalizedQuestion, normalizedNotes));
+  }
+  const result = await callChatCompletionsJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: '当玩家在打本中卡住时，基于公开剧本信息和玩家自己的笔记给出不剧透的梳理步骤与反问，引导玩家自己推理。',
+        script: scriptPublicContext(script),
+        question: normalizedQuestion,
+        notes: normalizedNotes,
+      }),
+    },
+  ], buildStuckCoachSchema());
+  return createAiResult(normalizeAiStuckCoach(result.data, script, normalizedQuestion, normalizedNotes), result.meta);
+}
+
+async function generatePlayRecap(config, script = {}, record = {}, notes = []) {
+  const normalizedRecord = {
+    role: normalizeText(record.role, 80),
+    rating: normalizeInteger(record.rating, 1, 5, 0),
+    note: normalizeText(record.note, 500),
+  };
+  const normalizedNotes = normalizeUserNotes(notes);
+  if (config.provider === 'mock') {
+    return createAiResult(normalizeAiPlayRecap(buildMockPlayRecap(script, normalizedRecord, normalizedNotes), script, normalizedRecord, normalizedNotes));
+  }
+  const result = await callChatCompletionsJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        task: '基于玩家自己的打本记录和笔记生成简短复盘，提炼体验亮点并给出下一次可执行建议，不补写剧本真相。',
+        script: scriptPublicContext(script),
+        record: normalizedRecord,
+        notes: normalizedNotes,
+      }),
+    },
+  ], buildPlayRecapSchema());
+  return createAiResult(normalizeAiPlayRecap(result.data, script, normalizedRecord, normalizedNotes), result.meta);
+}
+
 function buildMockScriptExplanation(profile = {}, script = {}, reasons = []) {
   const reasonText = normalizeTags(reasons).slice(0, 3).join('、');
   const title = normalizeText(script.title, 40) || '这本剧本';
@@ -955,6 +1186,9 @@ module.exports = {
   buildMockGameGuide,
   normalizeAiGameGuide,
   generateGameGuide,
+  generatePlayPrep,
+  generateStuckCoach,
+  generatePlayRecap,
   buildMockScriptExplanation,
   generateScriptExplanation,
   classifyReport,

@@ -58,7 +58,7 @@ Page({
       this.goLogin();
       return;
     }
-    wx.navigateTo({ url: '/pages/tools/index' });
+    wx.switchTab({ url: '/pages/tools/index' });
   },
 
   goScripts() {
