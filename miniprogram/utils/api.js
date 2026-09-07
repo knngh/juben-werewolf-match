@@ -14,7 +14,7 @@ function request(method, url, data) {
   }
 
   return new Promise((resolve) => {
-    wx.request({
+    const options = {
       url: config.apiBaseUrl + url,
       method,
       data: data || {},
@@ -33,17 +33,26 @@ function request(method, url, data) {
         resolve(Object.assign({ status: res.statusCode }, payload));
       },
       fail(error) {
-        const errorType = error && (error.errMsg || '').toLowerCase().includes('timeout')
+        const errorType = error && String(error.errMsg || error.message || '').toLowerCase().includes('timeout')
           ? 'timeout'
           : 'network';
+        const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(config.apiBaseUrl);
         resolve({
           code: 500,
           status: 0,
           errorType,
-          message: errorType === 'timeout' ? '请求超时，请确认本地服务已启动' : '网络连接失败，请检查 API 地址',
+          message: errorType === 'timeout' ? '请求超时，请稍后重试' : '暂时无法连接服务',
+          hint: isLocal
+            ? '本地联调：请在 backend 目录运行 npm run dev 并保持运行。真机调试不能使用 127.0.0.1。'
+            : '请检查网络连接后重试。',
         });
       },
-    });
+    };
+    try {
+      wx.request(options);
+    } catch (error) {
+      options.fail(error);
+    }
   });
 }
 

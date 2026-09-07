@@ -1,4 +1,6 @@
+<import src="../../templates/load-error.wxml" />
 <view class="page archive-page">
+  <template wx:if="{{loggedIn && loadError}}" is="load-error" data="{{message: loadError, hint: loadErrorHint, loading: loading}}" />
   <view class="toolbar">
     <view><text class="title">我的打本档案</text><text class="subtitle">每一次记录，都会让下一次选本更接近你</text></view>
     <button wx:if="{{loggedIn}}" class="btn btn-secondary btn-small" bindtap="goTools">去记录</button>
@@ -10,7 +12,7 @@
     <button class="btn btn-primary btn-full login-btn" bindtap="goLogin">登录</button>
   </view>
   <view wx:elif="{{loading}}" class="loading">正在整理你的档案...</view>
-  <view wx:else>
+  <view wx:elif="{{!loadError || records.length}}">
     <view class="archive-hero">
       <text class="archive-kicker">YOUR PLAY HISTORY</text>
       <text class="archive-title">{{summary.total}} 次打本记录</text>

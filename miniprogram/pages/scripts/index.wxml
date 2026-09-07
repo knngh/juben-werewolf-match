@@ -1,4 +1,6 @@
+<import src="../../templates/load-error.wxml" />
 <view class="page scripts-page">
+  <template wx:if="{{loadError}}" is="load-error" data="{{message: loadError, hint: loadErrorHint, loading: loading}}" />
   <view class="header">
     <view>
       <text class="title">今天玩什么</text>
@@ -43,11 +45,11 @@
   </scroll-view>
 
   <view wx:if="{{loading}}" class="loading">正在整理适合你的剧本...</view>
-  <view wx:elif="{{!scripts.length}}" class="empty">
+  <view wx:elif="{{!scripts.length && !loadError}}" class="empty">
     <text class="empty-title">没有找到合适结果</text>
     <text class="empty-hint">换个关键词或筛选条件再试试</text>
   </view>
-  <view wx:else class="script-list">
+  <view wx:elif="{{scripts.length}}" class="script-list">
     <view class="list-heading"><view><text class="list-title">推荐清单</text><text class="list-subtitle">先看匹配度，再决定要不要深入了解</text></view><text class="list-count">{{resultCountText}}</text></view>
     <view wx:for="{{scripts}}" wx:key="id" class="script-card" data-id="{{item.id}}" bindtap="goDetail">
       <view class="script-head">

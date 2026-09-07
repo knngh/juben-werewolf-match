@@ -1,5 +1,11 @@
+<import src="../../templates/load-error.wxml" />
 <view class="page tools-page">
-  <view wx:if="{{loading}}" class="loading">正在准备打本工具...</view>
+  <template wx:if="{{loadError}}" is="load-error" data="{{message: loadError, hint: loadErrorHint, loading: loading}}" />
+  <view wx:if="{{!loggedIn}}" class="empty">
+    <text class="section-title">尚未登录</text>
+    <button class="btn btn-primary btn-full" bindtap="goLogin">登录</button>
+  </view>
+  <view wx:elif="{{loading}}" class="loading">正在准备打本工具...</view>
   <view wx:elif="{{selectedScript}}">
     <view class="tool-header">
       <view>
@@ -112,4 +118,5 @@
       </view>
     </view>
   </view>
+  <view wx:elif="{{!loadError}}" class="empty">暂无可用剧本</view>
 </view>

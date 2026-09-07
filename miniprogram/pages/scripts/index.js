@@ -34,11 +34,13 @@ function enrichScript(item) {
 Page({
   data: {
     loading: true,
+    loadError: '',
+    loadErrorHint: '',
     loggedIn: false,
     tasteCompleted: false,
     heroTitle: '从不踩雷开始选本',
     heroDesc: '先看亮点，再看雷点，把“今天玩什么”变成一个更轻松的决定。',
-    resultCountText: '8 本候选',
+    resultCountText: '--',
     savedCount: 0,
     highMatchCount: 0,
     scripts: [],
@@ -80,6 +82,7 @@ Page({
   },
 
   load() {
+    const loadId = this.loadId = (this.loadId || 0) + 1;
     const loggedIn = !!api.getToken();
     this.setData({ loggedIn, loading: true });
     const tastePromise = loggedIn
@@ -87,22 +90,32 @@ Page({
       : Promise.resolve({ code: 0, data: { completedAt: '' } });
     const query = api.toQuery(this.data.filters);
     return Promise.all([api.get('/api/scripts' + query), tastePromise]).then(([scriptsRes, tasteRes]) => {
-      const next = { loading: false };
+      if (loadId !== this.loadId) return;
+      const next = { loading: false, loadError: '', loadErrorHint: '' };
       if (scriptsRes.code === 0 && Array.isArray(scriptsRes.data)) {
         next.scripts = scriptsRes.data.map(enrichScript);
         next.resultCountText = next.scripts.length + ' 本候选';
         next.savedCount = next.scripts.filter((item) => item.saved).length;
         next.highMatchCount = next.scripts.filter((item) => item.matchScore >= 80).length;
       } else {
-        next.scripts = [];
-        wx.showToast({ title: scriptsRes.message || '剧本库加载失败', icon: 'none' });
+        next.loadError = scriptsRes.message || '剧本库加载失败';
+        next.loadErrorHint = scriptsRes.hint || '';
       }
-      next.tasteCompleted = !!(tasteRes.code === 0 && tasteRes.data && tasteRes.data.completedAt);
+      next.tasteCompleted = this.data.tasteCompleted;
+      if (tasteRes.code === 0 && tasteRes.data) {
+        next.tasteCompleted = !!tasteRes.data.completedAt;
+      } else if (!next.loadError) {
+        next.loadError = tasteRes.message || '口味画像暂未更新';
+        next.loadErrorHint = tasteRes.hint || '';
+      }
       next.heroTitle = next.tasteCompleted ? '你的下一本，已经排好' : '从不踩雷开始选本';
       next.heroDesc = next.tasteCompleted
         ? '推荐会结合你的偏好、雷点和游玩频率动态排序。'
         : '先看亮点，再看雷点，把“今天玩什么”变成一个更轻松的决定。';
       this.setData(next);
+    }).catch(() => {
+      if (loadId !== this.loadId) return;
+      this.setData({ loading: false, loadError: '加载失败，请重试', loadErrorHint: '' });
     });
   },
 

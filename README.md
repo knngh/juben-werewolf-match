@@ -36,12 +36,16 @@ cd backend
 cp .env.example .env
 # 在 .env 中配置 TIANDITU_KEY，用于地点搜索；生产环境的小程序微信登录需配置 WECHAT_MINIPROGRAM_APPID / WECHAT_MINIPROGRAM_SECRET
 npm install
-npm start
+npm run dev
 ```
 
 API 默认：`http://localhost:3000`
 
-本地微信开发工具联调请运行 `npm run dev`。该命令会自动开启 `WECHAT_LOGIN_DEV_MODE=true`，用 `wx.login` 的 code 生成开发用户，不需要真实微信 Secret；生产环境请使用 `npm start`，并配置真实 AppID 和 Secret。
+本地微信开发工具联调请运行 `npm run dev`。该命令会自动开启 `WECHAT_LOGIN_DEV_MODE=true` 和 mock AI，不需要真实微信 Secret；mock AI 是固定规则演示，并非真实模型推理。生产环境请使用 `npm start`，并配置真实 AppID 和 Secret。
+
+后端必须在整个联调期间持续运行。微信开发者工具重新编译不会自动启动后端；停止该进程或关闭它所在的终端后，`127.0.0.1:3000` 请求会报 `ERR_CONNECTION_REFUSED`。先用 `curl http://127.0.0.1:3000/api/health` 检查服务，再重新编译或点击页面的“重新加载”。不要通过延长请求超时来处理连接拒绝，也不要终止来源不明的占用端口进程。
+
+选本、工具、档案页会区分连接失败和空数据。重试保留当前已加载数据；工具页同一本的重试不重置计时器或未保存笔记。工具加载统一在 `onShow` 触发，以支持首次进入、登录返回和失败后重新进入 Tab（[微信 Page 生命周期](https://developers.weixin.qq.com/miniprogram/dev/reference/api/Page.html#onShow)）。
 
 后端会读取 `backend/.env`，其中 `TIANDITU_KEY` 和 `WECHAT_MINIPROGRAM_SECRET` 只在服务端使用；前端和小程序不直接暴露 key/secret。
 
@@ -128,7 +132,7 @@ npm run dev
 
    ```bash
    cd backend
-   npm start
+   npm run dev
    ```
 
 2. 用微信开发者工具打开 `miniprogram/` 目录。
@@ -154,6 +158,7 @@ npm run dev
 
 ```bash
 node miniprogram/scripts/smoke-miniprogram.js
+node --test miniprogram/scripts/test-network-recovery.js
 ```
 
 ### 生产构建

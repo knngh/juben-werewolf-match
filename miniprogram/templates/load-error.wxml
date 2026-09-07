@@ -1,0 +1,7 @@
+<template name="load-error">
+  <view class="load-error" role="alert">
+    <text class="load-error-title">{{message}}</text>
+    <text wx:if="{{hint}}" class="load-error-hint">{{hint}}</text>
+    <button class="btn btn-secondary load-error-retry" bindtap="load" loading="{{loading}}" disabled="{{loading}}">重新加载</button>
+  </view>
+</template>

@@ -237,3 +237,37 @@ textarea {
   margin: 22rpx 0;
   background: #e7ebe2;
 }
+
+.load-error {
+  margin: 24rpx 0;
+  padding: 24rpx 0;
+  border-top: 2rpx solid #b5454d;
+  border-bottom: 1rpx solid #d8ded2;
+  word-break: break-word;
+}
+
+.load-error-title,
+.load-error-hint {
+  display: block;
+  line-height: 1.6;
+}
+
+.load-error-title {
+  color: #923840;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.load-error-hint {
+  margin-top: 8rpx;
+  color: #52604e;
+  font-size: 24rpx;
+}
+
+.load-error-retry {
+  margin: 16rpx 0 0;
+  min-height: 72rpx;
+  width: 240rpx;
+  max-width: 100%;
+  font-size: 26rpx;
+}

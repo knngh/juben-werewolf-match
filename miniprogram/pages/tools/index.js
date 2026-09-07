@@ -34,6 +34,8 @@ function activeSegmentLabel(index, segments) {
 Page({
   data: {
     loading: true,
+    loadError: '',
+    loadErrorHint: '',
     loggedIn: false,
     scripts: [],
     scriptId: 0,
@@ -70,32 +72,35 @@ Page({
   },
 
   onLoad(query) {
-    if (!api.getToken()) {
-      wx.redirectTo({ url: navigation.loginUrlWithRedirect('/pages/tools/index' + (query.id ? '?id=' + query.id : '')) });
-      return;
-    }
     this.pendingScriptId = Number(query.id) || 0;
-    this.load();
   },
 
   onShow() {
-    if (!api.getToken()) return;
-    const requestedScriptId = Number(wx.getStorageSync('jwm_tools_script_id')) || 0;
-    if (!requestedScriptId) return;
-    wx.removeStorageSync('jwm_tools_script_id');
-    this.pendingScriptId = requestedScriptId;
-    if (this.data.scripts.length) {
-      const selectedScript = this.data.scripts.find((item) => item.id === requestedScriptId);
-      if (selectedScript) {
-        this.stopTimer();
-        this.setData({ scriptId: selectedScript.id, selectedScript });
-        this.loadNotes();
-        this.resetTimer();
-        this.pendingScriptId = 0;
-        return;
-      }
+    if (!api.getToken()) {
+      this.stopTimer();
+      this.loadPromise = null;
+      this.setData({
+        loggedIn: false, loading: false, loadError: '', loadErrorHint: '',
+        scripts: [], scriptId: 0, selectedScript: null, notes: [], records: [],
+        aiPrep: null, aiCoach: null, aiRecap: null, coachQuestion: '',
+        noteForm: { title: '', content: '' },
+        recordForm: { role: '', rating: 0, note: '', playedAt: today() },
+      });
+      return Promise.resolve();
     }
-    this.load();
+    const requestedScriptId = Number(wx.getStorageSync('jwm_tools_script_id')) || 0;
+    if (requestedScriptId) {
+      wx.removeStorageSync('jwm_tools_script_id');
+      this.pendingScriptId = requestedScriptId;
+    }
+    if (requestedScriptId || !this.data.loggedIn || !this.data.selectedScript || this.data.loadError) {
+      return this.load();
+    }
+    return this.loadPromise || Promise.resolve();
+  },
+
+  goLogin() {
+    wx.navigateTo({ url: navigation.loginUrlWithRedirect('/pages/tools/index') });
   },
 
   onUnload() {
@@ -107,30 +112,44 @@ Page({
   },
 
   load() {
-    this.setData({ loading: true, loggedIn: !!api.getToken() });
-    return Promise.all([
+    if (this.loadPromise) return this.loadPromise;
+    const token = api.getToken();
+    if (!token) return this.onShow();
+    this.setData({ loading: true, loggedIn: true });
+    const pending = Promise.all([
       api.get('/api/scripts'),
       api.get('/api/play-records'),
     ]).then(([scriptsRes, recordsRes]) => {
+      if (api.getToken() !== token) return;
       if (scriptsRes.code !== 0 || !Array.isArray(scriptsRes.data)) {
-        this.setData({ loading: false });
-        wx.showToast({ title: scriptsRes.message || '剧本加载失败', icon: 'none' });
+        this.setData({ loading: false, loadError: scriptsRes.message || '剧本加载失败', loadErrorHint: scriptsRes.hint || '' });
         return;
       }
       const scripts = scriptsRes.data;
       const targetId = this.pendingScriptId || this.data.scriptId || (scripts[0] && scripts[0].id) || 0;
       const selectedScript = scripts.find((item) => item.id === targetId) || scripts[0] || null;
+      const scriptChanged = selectedScript && selectedScript.id !== this.data.scriptId;
+      const recordsReady = recordsRes.code === 0 && recordsRes.data && Array.isArray(recordsRes.data.records);
       this.setData({
         loading: false,
+        loadError: recordsReady ? '' : recordsRes.message || '打本记录暂未更新',
+        loadErrorHint: recordsReady ? '' : recordsRes.hint || '',
         scripts,
         scriptId: selectedScript ? selectedScript.id : 0,
         selectedScript,
-        records: recordsRes.code === 0 && recordsRes.data ? recordsRes.data.records || [] : [],
+        records: recordsReady ? recordsRes.data.records : this.data.records,
       });
       this.pendingScriptId = 0;
-      this.loadNotes();
-      this.resetTimer();
+      if (scriptChanged) this.resetTimer();
+      return this.loadNotes();
+    }).catch(() => {
+      if (api.getToken() !== token) return;
+      this.setData({ loading: false, loadError: '工具加载失败，请重试', loadErrorHint: '' });
+    }).then(() => {
+      if (this.loadPromise === pending) this.loadPromise = null;
     });
+    this.loadPromise = pending;
+    return pending;
   },
 
   onScriptPickerChange(event) {
@@ -155,8 +174,16 @@ Page({
 
   loadNotes() {
     if (!this.data.scriptId) return;
-    api.get('/api/scripts/' + this.data.scriptId + '/notes').then((res) => {
-      if (res.code === 0) this.setData({ notes: res.data || [] });
+    const scriptId = this.data.scriptId;
+    const token = api.getToken();
+    return api.get('/api/scripts/' + this.data.scriptId + '/notes').then((res) => {
+      if (scriptId !== this.data.scriptId || api.getToken() !== token) return;
+      if (res.code === 0 && Array.isArray(res.data)) this.setData({ notes: res.data });
+      else this.setData({ loadError: res.message || '笔记暂未更新', loadErrorHint: res.hint || '' });
+    }).catch(() => {
+      if (scriptId === this.data.scriptId && api.getToken() === token) {
+        this.setData({ loadError: '笔记加载失败，请重试', loadErrorHint: '' });
+      }
     });
   },
 
