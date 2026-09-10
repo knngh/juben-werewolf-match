@@ -21,15 +21,28 @@ Page({
 
   onShow() {
     if (!api.getToken()) {
+      this.clearOwner('');
       this.setData({ loggedIn: false, loading: false });
       return;
     }
-    this.load();
+    return this.load();
+  },
+
+  clearOwner(token) {
+    if (this.ownerToken === token) return;
+    this.ownerToken = token;
+    this.loadVersion = (this.loadVersion || 0) + 1;
+    this.setData({ records: [], summary: { total: 0, ratedCount: 0, averageRating: 0, typeCounts: [] },
+      typeRows: [], topType: '还没有偏好', averageRatingText: '--', loadError: '', loadErrorHint: '' });
   },
 
   load() {
+    const token = api.getToken();
+    this.clearOwner(token);
+    const loadVersion = this.loadVersion = (this.loadVersion || 0) + 1;
     this.setData({ loggedIn: true, loading: true });
     return api.get('/api/play-records').then((res) => {
+      if (token !== api.getToken() || loadVersion !== this.loadVersion) return;
       if (res.code !== 0 || !res.data) {
         this.setData({ loading: false, loadError: res.message || '档案加载失败', loadErrorHint: res.hint || '' });
         return;
@@ -50,6 +63,7 @@ Page({
         averageRatingText: summary.averageRating ? String(summary.averageRating) : '--',
       });
     }).catch(() => {
+      if (token !== api.getToken() || loadVersion !== this.loadVersion) return;
       this.setData({ loading: false, loadError: '档案加载失败，请重试', loadErrorHint: '' });
     });
   },

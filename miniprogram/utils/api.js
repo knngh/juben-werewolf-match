@@ -4,6 +4,11 @@ function getToken() {
   return wx.getStorageSync('jwm_token') || '';
 }
 
+function getUserId() {
+  const id = Number(wx.getStorageSync('jwm_user_id'));
+  return Number.isSafeInteger(id) && id > 0 ? id : 0;
+}
+
 function request(method, url, data) {
   const headers = {
     'Content-Type': 'application/json',
@@ -22,8 +27,9 @@ function request(method, url, data) {
       timeout: 12000,
       success(res) {
         const payload = res.data || {};
-        if (res.statusCode === 401) {
+        if (res.statusCode === 401 && getToken() === token) {
           wx.removeStorageSync('jwm_token');
+          wx.removeStorageSync('jwm_user_id');
           const pages = getCurrentPages();
           const current = pages[pages.length - 1];
           if (!current || current.route !== 'pages/login/index') {
@@ -69,6 +75,7 @@ function toQuery(params) {
 
 module.exports = {
   getToken,
+  getUserId,
   toQuery,
   get(url) {
     return request('GET', url);
