@@ -102,4 +102,74 @@ test('solo discovery and play archive API', async (t) => {
     assert.equal(coach.code, 0);
     assert.match(coach.data.coach.summary, /12/);
   });
+
+  await t.test('notes support owner-only correction and durable create retries', async () => {
+    const token = await register();
+    const other = await register();
+    const url = '/api/scripts/1/notes';
+    const draft = { category: '疑点', title: 'First', content: 'A clue', clientRequestId: 'note-retry-key-0001' };
+    const results = await Promise.all([request('POST', url, draft, token), request('POST', url, draft, token)]);
+    assert(results.every((res) => res.code === 0));
+    const id = results[0].data.id;
+    assert.equal(results[1].data.id, id);
+    assert.equal((await request('GET', url, undefined, token)).data.length, 1);
+    assert.equal((await request('POST', url, { ...draft, content: 'Changed' }, token)).status, 409);
+    assert.equal((await request('PATCH', url + '/' + id, { content: 'Not mine' }, other)).status, 404);
+    assert.equal((await request('DELETE', url + '/' + id, undefined, other)).status, 404);
+    assert.equal((await request('PATCH', '/api/scripts/2/notes/' + id, { content: 'Wrong script' }, token)).status, 404);
+    assert.equal((await request('PATCH', url + '/' + id, { content: 'Corrected', category: '时间线' }, token)).code, 0);
+    const notes = await request('GET', url, undefined, token);
+    assert.equal(notes.data[0].content, 'Corrected');
+    assert.equal(notes.data[0].title, 'First');
+    assert.equal((await request('POST', url, draft, token)).data.id, id);
+    assert.equal((await request('DELETE', url + '/' + id, undefined, token)).code, 0);
+    assert.equal((await request('POST', url, draft, token)).status, 410);
+    assert.equal((await request('GET', url, undefined, token)).data.length, 0);
+    assert.equal((await request('POST', url, draft, other)).code, 0);
+  });
+
+  await t.test('record correction and deletion recompute recommendations without duplicate retries', async () => {
+    const token = await register();
+    const other = await register();
+    await request('POST', '/api/taste-profile', { experience: ['硬核推理'], frequency: '高频' }, token);
+    const baseline = (await request('GET', '/api/scripts/2', undefined, token)).data.matchScore;
+    const draft = { scriptId: 2, rating: 1, playedAt: '2026-09-10', clientRequestId: 'record-retry-key-0001' };
+    const results = await Promise.all([request('POST', '/api/play-records', draft, token), request('POST', '/api/play-records', draft, token)]);
+    const id = results[0].data.record.id;
+    assert.equal(results[1].data.record.id, id);
+    const url = '/api/play-records/' + id;
+    const low = (await request('GET', '/api/scripts/2', undefined, token)).data.matchScore;
+    assert.equal((await request('GET', url, undefined, other)).status, 404);
+    assert.equal((await request('PATCH', url, { rating: 5 }, other)).status, 404);
+    assert.equal((await request('DELETE', url, undefined, other)).status, 404);
+    assert.equal((await request('PATCH', url, { rating: 5, role: 'Detective', playedAt: '2026-09-09' }, token)).code, 0);
+    assert((await request('GET', '/api/scripts/2', undefined, token)).data.matchScore > low);
+    const updated = (await request('GET', url, undefined, token)).data;
+    assert.equal(updated.role, 'Detective');
+    assert.equal(updated.playedAt, '2026-09-09');
+    assert.equal((await request('POST', '/api/play-records', draft, token)).data.record.id, id);
+    assert.equal((await request('POST', '/api/play-records', { ...draft, rating: 4 }, token)).status, 409);
+    assert.equal((await request('PATCH', url, { playedAt: '2026-02-30' }, token)).status, 400);
+    assert.equal((await request('DELETE', url, undefined, token)).data.summary.total, 0);
+    assert.equal((await request('GET', '/api/scripts/2', undefined, token)).data.matchScore, baseline);
+    assert.equal((await request('POST', '/api/play-records', draft, token)).status, 410);
+  });
+
+  await t.test('older notes and records remain accessible through pagination', async () => {
+    const token = await register();
+    for (let i = 0; i < 3; i += 1) {
+      await request('POST', '/api/play-records', { scriptId: 1, rating: 4, playedAt: '2026-09-10' }, token);
+      await request('POST', '/api/scripts/1/notes', { category: '疑点', content: 'Note ' + i }, token);
+    }
+    for (const url of ['/api/play-records', '/api/scripts/1/notes']) {
+      const first = await request('GET', url + '?limit=2', undefined, token);
+      const next = await request('GET', url + '?limit=2&offset=2', undefined, token);
+      const rows = (res) => Array.isArray(res.data) ? res.data : res.data.records;
+      assert.equal(rows(first).length, 2);
+      assert.equal(first.pagination.total, 3);
+      assert.equal(rows(next).length, 1);
+      assert.equal(next.pagination.hasMore, false);
+      assert(!rows(first).some((row) => row.id === rows(next)[0].id));
+    }
+  });
 });

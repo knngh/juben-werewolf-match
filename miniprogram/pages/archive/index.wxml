@@ -32,8 +32,15 @@
 
     <view class="section record-section">
       <view class="section-head"><text class="section-title">最近打本</text><button class="text-link" bindtap="goTools">打开工具</button></view>
-      <view wx:if="{{records.length}}" class="record-list"><view wx:for="{{records}}" wx:key="id" class="record-row"><view class="record-main"><text class="record-title">{{item.scriptTitle}}</text><text class="record-meta">{{item.playedAt}} · {{item.gameType}} · {{item.role || '未填写角色'}}</text><text wx:if="{{item.note}}" class="record-note">{{item.note}}</text></view><text wx:if="{{item.rating}}" class="record-rating">{{item.rating}} / 5</text></view></view>
+      <view wx:if="{{records.length}}" class="record-list">
+        <view wx:for="{{records}}" wx:key="id" class="record-row">
+          <view class="record-main"><text class="record-title">{{item.scriptTitle}}</text><text class="record-meta">{{item.playedAt}} · {{item.gameType}} · {{item.role || '未填写角色'}}</text><text wx:if="{{item.note}}" class="record-note">{{item.note}}</text>
+            <view class="item-actions"><button class="text-link" disabled="{{deletingRecordId}}" data-id="{{item.id}}" bindtap="editRecord">编辑</button><button class="text-link danger-link" disabled="{{deletingRecordId}}" loading="{{deletingRecordId === item.id}}" data-id="{{item.id}}" bindtap="deleteRecord">删除</button></view>
+          </view><text wx:if="{{item.rating}}" class="record-rating">{{item.rating}} / 5</text>
+        </view>
+      </view>
       <view wx:else class="empty archive-empty"><text class="empty-title">还没有打本记录</text><text class="empty-hint">从推荐页挑一本，开始你的第一场记录</text><button class="btn btn-primary archive-empty-btn" bindtap="goScripts">去选本</button></view>
+      <button wx:if="{{hasMoreRecords}}" class="text-link" loading="{{loadingMoreRecords}}" disabled="{{loadingMoreRecords || deletingRecordId}}" bindtap="loadMoreRecords">加载更早记录</button>
     </view>
   </view>
 </view>

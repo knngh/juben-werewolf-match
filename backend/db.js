@@ -93,6 +93,15 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_script_notes_user_script ON script_notes(user_id, script_id, created_at DESC);
 
+  CREATE TABLE IF NOT EXISTS personal_create_requests (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    request_id TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    resource_id INTEGER NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, request_id)
+  );
+
   CREATE TABLE IF NOT EXISTS likes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_user_id INTEGER NOT NULL REFERENCES users(id),

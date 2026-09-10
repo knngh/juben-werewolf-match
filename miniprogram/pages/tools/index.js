@@ -32,12 +32,19 @@ function activeSegmentLabel(index, segments) {
   return segments[index] ? segments[index].label : '';
 }
 
+function confirmAction(title, content) {
+  return new Promise((resolve) => wx.showModal({ title, content, success: (result) => resolve(result.confirm), fail: () => resolve(false) }));
+}
+
 function freshWorkspace() {
   return {
     activeTab: 'timer', aiLoading: false, aiPrep: null, aiCoach: null, aiRecap: null, coachQuestion: '',
     notes: [], noteCategory: NOTE_CATEGORIES[0], noteForm: { title: '', content: '' },
     recordForm: { role: '', rating: 0, note: '', playedAt: today() },
     savingNote: false, savingRecord: false,
+    editingNoteId: 0, editingRecordId: 0, deletingNoteId: 0,
+    noteSubmission: null, recordSubmission: null,
+    hasMoreNotes: false, nextNoteOffset: 0, loadingMoreNotes: false,
     segments: buildSegments(0, DEFAULT_SEGMENTS), activeSegmentIndex: 0,
     timerSeconds: 600, timerText: '10:00', timerRunning: false, timerDeadline: 0,
     currentSegmentLabel: DEFAULT_SEGMENTS[0].label,
@@ -73,7 +80,15 @@ Page({
       return Promise.resolve();
     }
     this.resumeClock();
-    const requestedScriptId = Number(wx.getStorageSync('jwm_tools_script_id')) || 0;
+    let requestedScriptId = Number(wx.getStorageSync('jwm_tools_script_id')) || 0;
+    const editRequest = wx.getStorageSync('jwm_tools_edit_record');
+    if (editRequest) {
+      wx.removeStorageSync('jwm_tools_edit_record');
+      if (editRequest.userId === this.ownerUserId && Number.isSafeInteger(editRequest.id) && editRequest.id > 0) {
+        this.pendingRecordId = editRequest.id;
+        requestedScriptId = Number(editRequest.scriptId) || 0;
+      }
+    }
     if (requestedScriptId) {
       wx.removeStorageSync('jwm_tools_script_id');
       this.pendingScriptId = requestedScriptId;
@@ -110,6 +125,7 @@ Page({
     this.detachClock();
     this.ownerToken = token;
     this.ownerUserId = api.getUserId ? api.getUserId() : 0;
+    this.pendingRecordId = 0;
     this.contextVersion = (this.contextVersion || 0) + 1;
     this.loadVersion = (this.loadVersion || 0) + 1;
     this.loadPromise = null;
@@ -129,6 +145,8 @@ Page({
       timerSeconds: this.data.timerSeconds, timerRunning: this.data.timerRunning, timerDeadline: this.data.timerDeadline,
       noteForm: this.data.noteForm, noteCategory: this.data.noteCategory,
       recordForm: this.data.recordForm, coachQuestion: this.data.coachQuestion,
+      editingNoteId: this.data.editingNoteId, editingRecordId: this.data.editingRecordId,
+      noteSubmission: this.data.noteSubmission, recordSubmission: this.data.recordSubmission,
     }));
     this.workspaceCache = this.workspaceCache || {};
     this.workspaceCache[this.ownerToken + ':' + this.data.scriptId] = value;
@@ -176,6 +194,9 @@ Page({
       recordForm: { role: text(record.role, 80), rating: Math.max(0, Math.min(5, Math.floor(Number(record.rating) || 0))),
         note: text(record.note, 500), playedAt: /^\d{4}-\d{2}-\d{2}$/.test(record.playedAt || '') ? record.playedAt : today() },
       coachQuestion: text(saved.coachQuestion, 300),
+      editingNoteId: Number.isSafeInteger(saved.editingNoteId) && saved.editingNoteId > 0 ? saved.editingNoteId : 0,
+      editingRecordId: Number.isSafeInteger(saved.editingRecordId) && saved.editingRecordId > 0 ? saved.editingRecordId : 0,
+      noteSubmission: saved.noteSubmission || null, recordSubmission: saved.recordSubmission || null,
     });
     this.resumeClock();
   },
@@ -237,7 +258,8 @@ Page({
         records: recordsReady ? recordsRes.data.records : this.data.records,
       });
       this.pendingScriptId = 0;
-      return this.loadNotes();
+      await this.loadNotes();
+      if (api.getToken() === token && loadVersion === this.loadVersion && this.pendingRecordId) return this.loadRecordForEdit();
     }).catch(() => {
       if (api.getToken() !== token || loadVersion !== this.loadVersion) return;
       this.setData({ loading: false, loadError: '工具加载失败，请重试', loadErrorHint: '' });
@@ -284,17 +306,30 @@ Page({
     return this.loadNotes();
   },
 
-  loadNotes() {
+  loadMoreNotes() {
+    if (this.data.loadingMoreNotes || !this.data.hasMoreNotes) return;
+    return this.loadNotes(true);
+  },
+
+  loadNotes(append = false) {
     if (!this.data.scriptId) return;
     const context = this.currentContext();
-    return api.get('/api/scripts/' + this.data.scriptId + '/notes').then((res) => {
-      if (!this.isCurrent(context)) return;
-      if (res.code === 0 && Array.isArray(res.data)) this.setData({ notes: res.data });
+    const version = this.notesVersion = (this.notesVersion || 0) + 1;
+    this.setData({ loadingMoreNotes: append });
+    const suffix = append ? '?offset=' + this.data.nextNoteOffset : '';
+    return api.get('/api/scripts/' + this.data.scriptId + '/notes' + suffix).then((res) => {
+      if (!this.isCurrent(context) || version !== this.notesVersion) return;
+      if (res.code === 0 && Array.isArray(res.data)) {
+        const notes = append ? this.data.notes.concat(res.data.filter((item) => !this.data.notes.some((old) => old.id === item.id))) : res.data;
+        this.setData({ notes, hasMoreNotes: !!(res.pagination && res.pagination.hasMore), nextNoteOffset: res.pagination && res.pagination.nextOffset || 0 });
+      }
       else this.setData({ loadError: res.message || '笔记暂未更新', loadErrorHint: res.hint || '' });
     }).catch(() => {
-      if (this.isCurrent(context)) {
+      if (this.isCurrent(context) && version === this.notesVersion) {
         this.setData({ loadError: '笔记加载失败，请重试', loadErrorHint: '' });
       }
+    }).then(() => {
+      if (this.isCurrent(context) && version === this.notesVersion) this.setData({ loadingMoreNotes: false });
     });
   },
 
@@ -452,27 +487,77 @@ Page({
     this.persistWorkspace();
   },
 
+  submissionId(kind, payload) {
+    const field = kind + 'Submission';
+    const fingerprint = JSON.stringify(payload);
+    const previous = this.data[field];
+    if (previous && previous.fingerprint === fingerprint && /^[A-Za-z0-9_-]{16,100}$/.test(previous.id)) return previous.id;
+    const id = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2) + '_' + Math.random().toString(36).slice(2);
+    this.setData({ [field]: { id, fingerprint } });
+    this.persistWorkspace();
+    return id;
+  },
+
+  async editNote(event) {
+    if (this.data.savingNote || this.data.deletingNoteId) return;
+    const note = this.data.notes.find((item) => item.id === Number(event.currentTarget.dataset.id));
+    if (!note) return;
+    const context = this.currentContext();
+    if ((this.data.noteForm.title || this.data.noteForm.content) &&
+        !await confirmAction('编辑这条笔记？', '当前编辑框里的草稿将被替换。')) return;
+    if (!this.isCurrent(context) || this.data.savingNote) return;
+    this.setData({ editingNoteId: note.id, noteSubmission: null, noteCategory: note.category,
+      noteForm: { title: note.title || '', content: note.content }, activeTab: 'notes' });
+    this.persistWorkspace();
+  },
+
+  cancelNoteEdit() {
+    if (this.data.savingNote) return;
+    this.setData({ editingNoteId: 0, noteSubmission: null, noteForm: { title: '', content: '' } });
+    this.persistWorkspace();
+  },
+
+  async deleteNote(event) {
+    if (this.data.savingNote || this.data.deletingNoteId) return;
+    const id = Number(event.currentTarget.dataset.id);
+    const context = this.currentContext();
+    if (!await confirmAction('删除笔记？', '删除后无法恢复。')) return;
+    if (!this.isCurrent(context) || this.data.savingNote || this.data.deletingNoteId) return;
+    this.setData({ deletingNoteId: id });
+    try {
+      const res = await api.delete('/api/scripts/' + context.scriptId + '/notes/' + id);
+      if (!this.isCurrent(context)) return;
+      if (res.code !== 0 && res.code !== 404) return wx.showToast({ title: res.message || '删除失败', icon: 'none' });
+      if (this.data.editingNoteId === id) this.cancelNoteEdit();
+      await this.loadNotes();
+    } catch {
+      if (this.isCurrent(context)) wx.showToast({ title: '删除失败，请重试', icon: 'none' });
+    } finally {
+      if (this.isCurrent(context)) this.setData({ deletingNoteId: 0 });
+    }
+  },
+
   saveNote() {
-    if (this.data.savingNote || !this.data.scriptId) return;
+    if (this.data.savingNote || this.data.deletingNoteId || !this.data.scriptId) return;
     if (!this.data.noteForm.content.trim()) {
       wx.showToast({ title: '先写下要记住的内容', icon: 'none' });
       return;
     }
     const context = this.currentContext();
-    const draft = JSON.stringify(this.data.noteForm);
+    const payload = { category: this.data.noteCategory, title: this.data.noteForm.title, content: this.data.noteForm.content };
+    const draft = JSON.stringify(payload);
+    const editingId = this.data.editingNoteId;
+    const url = '/api/scripts/' + this.data.scriptId + '/notes';
+    if (!editingId) payload.clientRequestId = this.submissionId('note', payload);
     this.setData({ savingNote: true });
-    return api.post('/api/scripts/' + this.data.scriptId + '/notes', {
-      category: this.data.noteCategory,
-      title: this.data.noteForm.title,
-      content: this.data.noteForm.content,
-    }).then((res) => {
+    return (editingId ? api.patch(url + '/' + editingId, payload) : api.post(url, payload)).then((res) => {
       if (!this.isCurrent(context)) return;
       this.setData({ savingNote: false });
       if (res.code !== 0) {
         wx.showToast({ title: res.message || '保存失败', icon: 'none' });
         return;
       }
-      if (JSON.stringify(this.data.noteForm) === draft) this.setData({ noteForm: { title: '', content: '' } });
+      if (JSON.stringify({ category: this.data.noteCategory, title: this.data.noteForm.title, content: this.data.noteForm.content }) === draft) this.cancelNoteEdit();
       this.persistWorkspace();
       this.loadNotes();
       wx.showToast({ title: '笔记已保存', icon: 'success' });
@@ -493,6 +578,32 @@ Page({
     this.persistWorkspace();
   },
 
+  async loadRecordForEdit() {
+    const id = this.pendingRecordId;
+    const context = this.currentContext();
+    const res = await api.get('/api/play-records/' + id);
+    if (!this.isCurrent(context) || id !== this.pendingRecordId) return;
+    if (res.code !== 0 || !res.data || res.data.scriptId !== context.scriptId) {
+      this.setData({ loadError: res.message || '记录加载失败', loadErrorHint: '' });
+      return;
+    }
+    this.pendingRecordId = 0;
+    const form = this.data.recordForm;
+    if ((form.role || form.rating || form.note) &&
+        !await confirmAction('编辑这条记录？', '当前编辑框里的草稿将被替换。')) return;
+    if (!this.isCurrent(context) || this.data.savingRecord) return;
+    const record = res.data;
+    this.setData({ editingRecordId: record.id, recordSubmission: null, activeTab: 'record',
+      recordForm: { role: record.role || '', rating: record.rating || 0, note: record.note || '', playedAt: record.playedAt } });
+    this.persistWorkspace();
+  },
+
+  cancelRecordEdit() {
+    if (this.data.savingRecord) return;
+    this.setData({ editingRecordId: 0, recordSubmission: null, recordForm: freshWorkspace().recordForm });
+    this.persistWorkspace();
+  },
+
   saveRecord() {
     if (this.data.savingRecord || !this.data.scriptId) return;
     if (!this.data.recordForm.rating) {
@@ -501,20 +612,21 @@ Page({
     }
     const context = this.currentContext();
     const draft = JSON.stringify(this.data.recordForm);
+    const editingId = this.data.editingRecordId;
+    const payload = Object.assign({}, this.data.recordForm, { scriptId: this.data.scriptId });
+    if (!editingId) payload.clientRequestId = this.submissionId('record', payload);
     this.setData({ savingRecord: true });
-    return api.post('/api/play-records', Object.assign({}, this.data.recordForm, {
-      scriptId: this.data.scriptId,
-    })).then((res) => {
+    return (editingId ? api.patch('/api/play-records/' + editingId, payload) : api.post('/api/play-records', payload)).then((res) => {
       if (!this.isCurrent(context)) return;
       this.setData({ savingRecord: false });
       if (res.code !== 0) {
         wx.showToast({ title: res.message || '保存失败', icon: 'none' });
         return;
       }
-      this.setData({ records: [res.data.record].concat(this.data.records) });
-      if (JSON.stringify(this.data.recordForm) === draft) this.setData({ recordForm: freshWorkspace().recordForm });
+      this.setData({ records: [res.data.record].concat(this.data.records.filter((item) => item.id !== res.data.record.id)) });
+      if (JSON.stringify(this.data.recordForm) === draft) this.cancelRecordEdit();
       this.persistWorkspace();
-      wx.showToast({ title: '已加入你的档案', icon: 'success' });
+      wx.showToast({ title: editingId ? '记录已更新' : '已加入你的档案', icon: 'success' });
     }).catch(() => {
       if (!this.isCurrent(context)) return;
       this.setData({ savingRecord: false });

@@ -52,23 +52,31 @@
       <view class="section tool-section first-section"><text class="section-title">把线索放在同一个地方</text><text class="section-hint">按分类记录，打完可回看</text></view>
       <scroll-view scroll-x class="category-scroll" show-scrollbar="{{false}}"><view class="category-row"><button wx:for="{{noteCategories}}" wx:key="*this" class="category-chip {{noteCategory === item ? 'category-active' : ''}}" data-category="{{item}}" bindtap="chooseNoteCategory">{{item}}</button></view></scroll-view>
       <view class="note-editor">
+        <view wx:if="{{editingNoteId}}" class="editor-status"><text>编辑笔记</text><button class="text-link" disabled="{{savingNote}}" bindtap="cancelNoteEdit">取消编辑</button></view>
         <input class="input" value="{{noteForm.title}}" data-field="title" bindinput="onNoteInput" maxlength="80" placeholder="标题，例如：第二幕时间线" />
         <textarea class="textarea note-textarea" value="{{noteForm.content}}" data-field="content" bindinput="onNoteInput" maxlength="1000" placeholder="记下人物关系、线索、疑点或时间点" />
-        <button class="btn btn-primary btn-full" loading="{{savingNote}}" bindtap="saveNote">保存这条笔记</button>
+        <button class="btn btn-primary btn-full" loading="{{savingNote}}" disabled="{{savingNote || deletingNoteId}}" bindtap="saveNote">{{editingNoteId ? '保存修改' : '保存这条笔记'}}</button>
       </view>
       <view wx:if="{{notes.length}}" class="note-list">
-        <view wx:for="{{notes}}" wx:key="id" class="note-item"><view class="note-item-head"><text class="note-category">{{item.category}}</text><text class="note-date">{{item.createdAt}}</text></view><text wx:if="{{item.title}}" class="note-title">{{item.title}}</text><text class="note-content">{{item.content}}</text></view>
+        <view wx:for="{{notes}}" wx:key="id" class="note-item">
+          <view class="note-item-head"><text class="note-category">{{item.category}}</text><text class="note-date">{{item.createdAt}}</text></view>
+          <text wx:if="{{item.title}}" class="note-title">{{item.title}}</text><text class="note-content">{{item.content}}</text>
+          <view class="item-actions"><button class="text-link" disabled="{{savingNote || deletingNoteId}}" data-id="{{item.id}}" bindtap="editNote">编辑</button><button class="text-link danger-link" disabled="{{savingNote || deletingNoteId}}" loading="{{deletingNoteId === item.id}}" data-id="{{item.id}}" bindtap="deleteNote">删除</button></view>
+        </view>
       </view>
       <view wx:else class="empty note-empty">还没有笔记，先记下第一条线索</view>
+      <button wx:if="{{hasMoreNotes}}" class="text-link" loading="{{loadingMoreNotes}}" disabled="{{loadingMoreNotes}}" bindtap="loadMoreNotes">加载更多笔记</button>
     </view>
 
     <view wx:elif="{{activeTab === 'record'}}" class="tool-panel">
       <view class="section tool-section first-section"><text class="section-title">打完就留下记录</text><text class="section-hint">你的体验会成为下一次推荐的依据</text></view>
       <view class="record-editor">
+        <view wx:if="{{editingRecordId}}" class="editor-status"><text>编辑打本记录</text><button class="text-link" disabled="{{savingRecord}}" bindtap="cancelRecordEdit">取消编辑</button></view>
+        <view class="field"><text class="label">打本日期</text><picker mode="date" value="{{recordForm.playedAt}}" data-field="playedAt" bindchange="onRecordInput"><view class="input date-picker">{{recordForm.playedAt}}</view></picker></view>
         <view class="field"><text class="label">这次拿到的角色</text><input class="input" value="{{recordForm.role}}" data-field="role" bindinput="onRecordInput" maxlength="80" placeholder="可选，例如：侦探" /></view>
         <view class="field"><text class="label">整体体验</text><view class="rating-row"><button wx:for="{{ratingOptions}}" wx:key="*this" class="rating {{recordForm.rating >= item ? 'rating-active' : ''}}" data-rating="{{item}}" bindtap="selectRating">{{item}}</button></view></view>
         <view class="field"><text class="label">一句话短评</text><textarea class="textarea" value="{{recordForm.note}}" data-field="note" bindinput="onRecordInput" maxlength="500" placeholder="这本最值得记住的是什么？" /></view>
-        <button class="btn btn-primary btn-full" loading="{{savingRecord}}" bindtap="saveRecord">保存到我的档案</button>
+        <button class="btn btn-primary btn-full" loading="{{savingRecord}}" disabled="{{savingRecord}}" bindtap="saveRecord">{{editingRecordId ? '保存修改' : '保存到我的档案'}}</button>
       </view>
       <view wx:if="{{records.length}}" class="recent-records"><text class="section-title">最近记录</text><view wx:for="{{records}}" wx:key="id" class="recent-row"><view><text class="recent-title">{{item.scriptTitle}}</text><text class="recent-meta">{{item.playedAt}} · {{item.role || '未填写角色'}}</text></view><text class="recent-rating">{{item.rating}} / 5</text></view></view>
     </view>

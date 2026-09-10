@@ -480,3 +480,44 @@
   font-size: 18rpx;
   font-weight: 700;
 }
+.editor-status,
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  flex-wrap: wrap;
+  margin-bottom: 12rpx;
+}
+
+.editor-status {
+  justify-content: space-between;
+  font-size: 26rpx;
+}
+
+.item-actions {
+  justify-content: flex-end;
+  margin-top: 12rpx;
+  margin-bottom: 0;
+}
+
+.text-link {
+  color: #1f7a4d;
+  font-size: 24rpx;
+  min-height: 64rpx;
+}
+
+.item-actions button,
+.editor-status button {
+  margin: 0;
+}
+
+.danger-link {
+  color: #a33939;
+}
+
+.date-picker {
+  box-sizing: border-box;
+  min-height: 80rpx;
+  display: flex;
+  align-items: center;
+}

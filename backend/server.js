@@ -3,7 +3,7 @@ require('./env')();
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-const { body, query, validationResult } = require('express-validator');
+const { body, query, param, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const { sign, middleware, requireAuth } = require('./auth');
 const db = require('./db');
@@ -319,62 +319,139 @@ function getPlayRecordSummary(userId) {
   };
 }
 
-app.get('/api/play-records', requireAuth, (req, res) => {
+function paginationValidation() {
+  return [query('limit').optional().isInt({ min: 1, max: 100 }), query('offset').optional().isInt({ min: 0, max: 100000 })];
+}
+
+function paginationFor(req, total) {
+  const offset = Number(req.query.offset || 0);
+  const limit = Number(req.query.limit || 100);
+  return { offset, limit, total, hasMore: offset + limit < total, nextOffset: offset + limit < total ? offset + limit : null };
+}
+
+function resourceIdValidation(name) {
+  return param(name).isInt({ min: 1, max: Number.MAX_SAFE_INTEGER }).withMessage('无效记录 ID');
+}
+
+function requestIdValidation() {
+  return body('clientRequestId').optional().isString().bail().matches(/^[A-Za-z0-9_-]{16,100}$/).withMessage('提交标识无效');
+}
+
+// Keep the original hash even after editing/deleting the resource, so delayed retries cannot recreate it.
+function createPersonalResource(req, res, kind, payload, create, exists) {
+  const key = req.body.clientRequestId;
+  const hash = crypto.createHash('sha256').update(JSON.stringify({ kind, payload })).digest('hex');
+  const result = db.transaction(() => {
+    if (key) {
+      const previous = db.prepare('SELECT payload_hash, resource_id FROM personal_create_requests WHERE user_id = ? AND request_id = ?').get(req.userId, key);
+      if (previous) {
+        if (previous.payload_hash !== hash) return { status: 409, message: '提交标识已用于其他内容，请重新提交' };
+        if (!exists(previous.resource_id)) return { status: 410, message: '这条记录已删除，请重新填写' };
+        return { id: previous.resource_id };
+      }
+    }
+    const id = Number(create());
+    if (key) db.prepare('INSERT INTO personal_create_requests (user_id, request_id, payload_hash, resource_id) VALUES (?, ?, ?, ?)').run(req.userId, key, hash, id);
+    return { id };
+  }).immediate();
+  if (result.status) {
+    res.status(result.status).json({ code: result.status, message: result.message });
+    return null;
+  }
+  return result.id;
+}
+
+function getPersonalRecord(id, userId) {
+  return db.prepare(`SELECT r.*, s.title AS script_title, s.game_type
+    FROM play_records r JOIN scripts s ON s.id = r.script_id WHERE r.id = ? AND r.user_id = ?`).get(id, userId);
+}
+
+function recordValidation() {
+  return [
+    body('role').optional().isString().bail().trim().isLength({ max: 80 }).withMessage('角色最多 80 字'),
+    body('rating').optional({ nullable: true }).isInt({ min: 1, max: 5 }).withMessage('评分应为 1-5 分'),
+    body('note').optional().isString().bail().trim().isLength({ max: 500 }).withMessage('短评最多 500 字'),
+    body('playedAt').optional().isString().bail().matches(/^\d{4}-\d{2}-\d{2}$/).bail().isISO8601({ strict: true }).withMessage('打本日期格式无效'),
+  ];
+}
+
+app.get('/api/play-records', requireAuth, paginationValidation(), (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const summary = getPlayRecordSummary(req.userId);
+  const pagination = paginationFor(req, summary.total);
   const rows = db.prepare(`
     SELECT r.*, s.title AS script_title, s.game_type
     FROM play_records r JOIN scripts s ON s.id = r.script_id
     WHERE r.user_id = ?
     ORDER BY r.played_at DESC, r.id DESC
-    LIMIT 100
-  `).all(req.userId);
+    LIMIT ? OFFSET ?
+  `).all(req.userId, pagination.limit, pagination.offset);
   res.json({
     code: 0,
     data: {
       records: rows.map(serializePlayRecord),
-      summary: getPlayRecordSummary(req.userId),
+      summary,
     },
+    pagination,
   });
 });
 
 app.post('/api/play-records', requireAuth, [
   body('scriptId').isInt({ min: 1 }).withMessage('请选择剧本'),
-  body('role').optional({ checkFalsy: true }).trim().isLength({ max: 80 }).withMessage('角色最多 80 字'),
-  body('rating').optional({ checkFalsy: true }).isInt({ min: 1, max: 5 }).withMessage('评分应为 1-5 分'),
-  body('note').optional({ checkFalsy: true }).trim().isLength({ max: 500 }).withMessage('短评最多 500 字'),
-  body('playedAt').optional({ checkFalsy: true }).isISO8601({ strict: false }).withMessage('打本日期格式无效'),
+  ...recordValidation(), requestIdValidation(),
 ], (req, res) => {
   if (!requireValidation(req, res)) return;
   const scriptId = Number(req.body.scriptId);
   if (!db.prepare('SELECT id FROM scripts WHERE id = ?').get(scriptId)) {
     return res.status(404).json({ code: 404, message: '剧本不存在' });
   }
-  const playedAt = normalizeText(req.body.playedAt, 20) || new Date().toISOString().slice(0, 10);
-  const result = db.prepare(`
-    INSERT INTO play_records (user_id, script_id, role, rating, note, played_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
-    req.userId,
-    scriptId,
-    normalizeText(req.body.role, 80),
-    req.body.rating ? Number(req.body.rating) : null,
-    normalizeText(req.body.note, 500),
-    playedAt.slice(0, 10)
-  );
-  const row = db.prepare(`
-    SELECT r.*, s.title AS script_title, s.game_type
-    FROM play_records r JOIN scripts s ON s.id = r.script_id WHERE r.id = ?
-  `).get(result.lastInsertRowid);
+  const payload = { scriptId, role: normalizeText(req.body.role, 80), rating: req.body.rating ? Number(req.body.rating) : null,
+    note: normalizeText(req.body.note, 500), playedAt: req.body.playedAt || null };
+  const id = createPersonalResource(req, res, 'record', payload, () => db.prepare(`
+    INSERT INTO play_records (user_id, script_id, role, rating, note, played_at) VALUES (?, ?, ?, ?, ?, ?)
+  `).run(req.userId, scriptId, payload.role, payload.rating, payload.note, payload.playedAt || new Date().toISOString().slice(0, 10)).lastInsertRowid,
+  (recordId) => getPersonalRecord(recordId, req.userId));
+  if (!id) return;
+  const row = getPersonalRecord(id, req.userId);
   res.json({ code: 0, data: { record: serializePlayRecord(row), summary: getPlayRecordSummary(req.userId) }, message: '打本记录已保存' });
 });
 
-app.get('/api/scripts/:id/notes', requireAuth, (req, res) => {
+app.get('/api/play-records/:id', requireAuth, resourceIdValidation('id'), (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const row = getPersonalRecord(Number(req.params.id), req.userId);
+  if (!row) return res.status(404).json({ code: 404, message: '记录不存在' });
+  res.json({ code: 0, data: serializePlayRecord(row) });
+});
+
+app.patch('/api/play-records/:id', requireAuth, [resourceIdValidation('id'), ...recordValidation()], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const row = getPersonalRecord(Number(req.params.id), req.userId);
+  if (!row) return res.status(404).json({ code: 404, message: '记录不存在' });
+  if (req.body.scriptId !== undefined && Number(req.body.scriptId) !== row.script_id) return res.status(400).json({ code: 400, message: '不能更换记录所属剧本' });
+  const value = (key, fallback) => req.body[key] === undefined ? fallback : req.body[key];
+  db.prepare(`UPDATE play_records SET role = ?, rating = ?, note = ?, played_at = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`)
+    .run(value('role', row.role), value('rating', row.rating), value('note', row.note), value('playedAt', row.played_at), row.id, req.userId);
+  res.json({ code: 0, data: { record: serializePlayRecord(getPersonalRecord(row.id, req.userId)), summary: getPlayRecordSummary(req.userId) }, message: '记录已更新' });
+});
+
+app.delete('/api/play-records/:id', requireAuth, resourceIdValidation('id'), (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const result = db.prepare('DELETE FROM play_records WHERE id = ? AND user_id = ?').run(Number(req.params.id), req.userId);
+  if (!result.changes) return res.status(404).json({ code: 404, message: '记录不存在' });
+  res.json({ code: 0, data: { summary: getPlayRecordSummary(req.userId) }, message: '记录已删除' });
+});
+
+app.get('/api/scripts/:id/notes', requireAuth, paginationValidation(), (req, res) => {
+  if (!requireValidation(req, res)) return;
   const scriptId = Number(req.params.id);
   if (!Number.isInteger(scriptId) || scriptId < 1) return res.status(400).json({ code: 400, message: '无效剧本' });
   if (!db.prepare('SELECT id FROM scripts WHERE id = ?').get(scriptId)) return res.status(404).json({ code: 404, message: '剧本不存在' });
+  const total = db.prepare('SELECT COUNT(*) AS count FROM script_notes WHERE user_id = ? AND script_id = ?').get(req.userId, scriptId).count;
+  const pagination = paginationFor(req, total);
   const rows = db.prepare(`
     SELECT id, script_id, category, title, content, created_at, updated_at
-    FROM script_notes WHERE user_id = ? AND script_id = ? ORDER BY created_at DESC, id DESC LIMIT 100
-  `).all(req.userId, scriptId);
+    FROM script_notes WHERE user_id = ? AND script_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+  `).all(req.userId, scriptId, pagination.limit, pagination.offset);
   res.json({ code: 0, data: rows.map((row) => ({
     id: row.id,
     scriptId: row.script_id,
@@ -383,23 +460,49 @@ app.get('/api/scripts/:id/notes', requireAuth, (req, res) => {
     content: row.content,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  })) });
+  })), pagination });
 });
 
 app.post('/api/scripts/:id/notes', requireAuth, [
   body('category').isIn(NOTE_CATEGORIES).withMessage('笔记分类无效'),
-  body('title').optional({ checkFalsy: true }).trim().isLength({ max: 80 }).withMessage('笔记标题最多 80 字'),
-  body('content').trim().isLength({ min: 1, max: 1000 }).withMessage('笔记内容应为 1-1000 字'),
+  body('title').optional().isString().bail().trim().isLength({ max: 80 }).withMessage('笔记标题最多 80 字'),
+  body('content').isString().bail().trim().isLength({ min: 1, max: 1000 }).withMessage('笔记内容应为 1-1000 字'),
+  requestIdValidation(),
 ], (req, res) => {
   if (!requireValidation(req, res)) return;
   const scriptId = Number(req.params.id);
   if (!Number.isInteger(scriptId) || scriptId < 1) return res.status(400).json({ code: 400, message: '无效剧本' });
   if (!db.prepare('SELECT id FROM scripts WHERE id = ?').get(scriptId)) return res.status(404).json({ code: 404, message: '剧本不存在' });
-  const result = db.prepare(`
+  const payload = { scriptId, category: req.body.category, title: normalizeText(req.body.title, 80), content: normalizeText(req.body.content, 1000) };
+  const id = createPersonalResource(req, res, 'note', payload, () => db.prepare(`
     INSERT INTO script_notes (user_id, script_id, category, title, content)
     VALUES (?, ?, ?, ?, ?)
-  `).run(req.userId, scriptId, req.body.category, normalizeText(req.body.title, 80), normalizeText(req.body.content, 1000));
-  res.json({ code: 0, data: { id: result.lastInsertRowid }, message: '笔记已保存' });
+  `).run(req.userId, scriptId, payload.category, payload.title, payload.content).lastInsertRowid,
+  (noteId) => db.prepare('SELECT id FROM script_notes WHERE id = ? AND user_id = ? AND script_id = ?').get(noteId, req.userId, scriptId));
+  if (!id) return;
+  res.json({ code: 0, data: { id }, message: '笔记已保存' });
+});
+
+app.patch('/api/scripts/:id/notes/:noteId', requireAuth, [
+  resourceIdValidation('id'), resourceIdValidation('noteId'),
+  body('category').optional().isIn(NOTE_CATEGORIES),
+  body('title').optional().isString().bail().trim().isLength({ max: 80 }),
+  body('content').optional().isString().bail().trim().isLength({ min: 1, max: 1000 }),
+], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const row = db.prepare('SELECT * FROM script_notes WHERE id = ? AND user_id = ? AND script_id = ?').get(Number(req.params.noteId), req.userId, Number(req.params.id));
+  if (!row) return res.status(404).json({ code: 404, message: '笔记不存在' });
+  const value = (key) => req.body[key] === undefined ? row[key] : req.body[key];
+  db.prepare(`UPDATE script_notes SET category = ?, title = ?, content = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`)
+    .run(value('category'), value('title'), value('content'), row.id, req.userId);
+  res.json({ code: 0, data: { id: row.id }, message: '笔记已更新' });
+});
+
+app.delete('/api/scripts/:id/notes/:noteId', requireAuth, [resourceIdValidation('id'), resourceIdValidation('noteId')], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const result = db.prepare('DELETE FROM script_notes WHERE id = ? AND user_id = ? AND script_id = ?').run(Number(req.params.noteId), req.userId, Number(req.params.id));
+  if (!result.changes) return res.status(404).json({ code: 404, message: '笔记不存在' });
+  res.json({ code: 0, data: { id: Number(req.params.noteId) }, message: '笔记已删除' });
 });
 
 app.get('/api/health', (req, res) => {

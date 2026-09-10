@@ -23,12 +23,15 @@ function harness(name = 'tools', storage = { jwm_token: 'user-a-token', jwm_user
       return { code: 0, data: scripts, pagination: { hasMore: false } };
     },
     post: async (url, data) => { requests.push({ url, data }); return { code: 0, data: { id: requests.length, record: { id: requests.length } } }; },
+    patch: async (url, data) => { requests.push({ method: 'PATCH', url, data }); return { code: 0, data: { id: 1, record: { id: 1 } } }; },
+    delete: async (url) => { requests.push({ method: 'DELETE', url }); return { code: 0, data: {} }; },
   };
   const wx = {
     getStorageSync: (key) => storage[key],
     setStorageSync: (key, value) => { storage[key] = JSON.parse(JSON.stringify(value)); },
     removeStorageSync: (key) => { delete storage[key]; },
-    showToast() {}, navigateTo() {}, stopPullDownRefresh() {},
+    showToast() {}, navigateTo() {}, switchTab() {}, stopPullDownRefresh() {},
+    showModal: ({ success }) => success({ confirm: true }),
   };
   class ClockDate extends Date {
     constructor(...args) { super(...(args.length ? args : [clock.now])); }
@@ -51,6 +54,94 @@ function harness(name = 'tools', storage = { jwm_token: 'user-a-token', jwm_user
   };
   return { page, api, storage, clock, requests, intervals };
 }
+
+test('a timed-out save reuses its persisted submission ID after reopening', async () => {
+  const first = harness();
+  await first.page.load();
+  let submitted;
+  first.api.post = async (url, data) => { submitted = data; return { code: 500, status: 0 }; };
+  first.page.setData({ 'noteForm.content': 'Do not duplicate this clue' });
+  await first.page.saveNote();
+  assert.match(submitted.clientRequestId, /^[A-Za-z0-9_-]{16,100}$/);
+  first.page.onUnload();
+  const second = harness('tools', first.storage, first.clock);
+  await second.page.load();
+  await second.page.saveNote();
+  assert.equal(second.requests[0].data.clientRequestId, submitted.clientRequestId);
+  second.page.setData({ 'noteForm.content': 'A different clue' });
+  await second.page.saveNote();
+  assert.notEqual(second.requests[1].data.clientRequestId, submitted.clientRequestId);
+});
+
+test('a note edit updates the same note and preserves a category changed during saving', async () => {
+  const { page, api, requests } = harness();
+  await page.load();
+  page.setData({ notes: [{ id: 1, category: '疑点', title: 'Clue', content: 'Before' }] });
+  await page.editNote({ currentTarget: { dataset: { id: 1 } } });
+  page.onNoteInput({ currentTarget: { dataset: { field: 'content' } }, detail: { value: 'Corrected' } });
+  const pending = deferred();
+  api.patch = (url, data) => { requests.push({ url, data }); return pending.promise; };
+  const save = page.saveNote();
+  page.chooseNoteCategory({ currentTarget: { dataset: { category: '时间线' } } });
+  pending.resolve({ code: 0, data: { id: 1 } });
+  await save;
+  assert.equal(requests[0].url, '/api/scripts/1/notes/1');
+  assert.equal(page.data.noteCategory, '时间线');
+  assert.equal(page.data.noteForm.content, 'Corrected');
+  assert.equal(page.data.editingNoteId, 1);
+});
+
+test('archive navigation edits the exact record under its original script', async () => {
+  const { page, api, storage, requests } = harness();
+  await page.load();
+  const get = api.get;
+  api.get = async (url) => url === '/api/play-records/19'
+    ? { code: 0, data: { id: 19, scriptId: 2, role: 'Detective', rating: 3, note: 'Before', playedAt: '2026-09-09' } } : get(url);
+  storage.jwm_tools_edit_record = { id: 19, scriptId: 2, userId: 1 };
+  await page.onShow();
+  assert.equal(page.data.scriptId, 2);
+  assert.equal(page.data.editingRecordId, 19);
+  assert.equal(page.data.recordForm.playedAt, '2026-09-09');
+  page.selectRating({ currentTarget: { dataset: { rating: 5 } } });
+  await page.saveRecord();
+  assert.equal(requests[0].method, 'PATCH');
+  assert.equal(requests[0].url, '/api/play-records/19');
+  assert.equal(page.data.editingRecordId, 0);
+});
+
+test('deleting the note being edited clears the editor and tolerates a deletion retry', async () => {
+  const { page, api, requests } = harness();
+  await page.load();
+  await page.editNote({ currentTarget: { dataset: { id: 1 } } });
+  api.delete = async (url) => { requests.push({ url }); return { code: 404 }; };
+  api.get = async () => ({ code: 0, data: [] });
+  await page.deleteNote({ currentTarget: { dataset: { id: 1 } } });
+  assert.equal(requests[0].url, '/api/scripts/1/notes/1');
+  assert.equal(page.data.notes.length, 0);
+  assert.equal(page.data.noteForm.content, '');
+  assert.equal(page.data.editingNoteId, 0);
+  assert.equal(page.data.deletingNoteId, 0);
+});
+
+test('archive deletion refreshes totals and cannot carry a response into another account', async () => {
+  const { page, api, storage } = harness('archive');
+  await page.load();
+  page.setData({ records: [{ id: 1 }], summary: { total: 1 } });
+  api.get = async () => ({ code: 0, data: { records: [], summary: { total: 0 } } });
+  await page.deleteRecord({ currentTarget: { dataset: { id: 1 } } });
+  assert.equal(page.data.summary.total, 0);
+  assert.equal(page.data.records.length, 0);
+  const pending = deferred();
+  api.delete = () => pending.promise;
+  const deletion = page.deleteRecord({ currentTarget: { dataset: { id: 2 } } });
+  await flush();
+  storage.jwm_token = 'user-b-token';
+  await page.onShow();
+  page.setData({ records: [{ id: 30 }], summary: { total: 1 } });
+  pending.resolve({ code: 0 });
+  await deletion;
+  assert.equal(page.data.records[0].id, 30);
+});
 
 test('changing scripts isolates drafts and restores each script draft on return', async () => {
   const { page } = harness();
