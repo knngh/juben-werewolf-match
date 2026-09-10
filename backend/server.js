@@ -5,8 +5,8 @@ const cors = require('cors');
 const crypto = require('crypto');
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
-const db = require('./db');
 const { sign, middleware, requireAuth } = require('./auth');
+const db = require('./db');
 const ai = require('./ai');
 const bookRecommendation = require('./book-recommendation');
 
@@ -37,6 +37,9 @@ const AI_BASE_URL = process.env.AI_BASE_URL || '';
 const AI_SITE_URL = process.env.AI_SITE_URL || '';
 const AI_APP_TITLE = process.env.AI_APP_TITLE || 'juben-werewolf-match';
 const AI_THINKING_MODE = process.env.AI_THINKING_MODE || 'disabled';
+const AI_USER_CONCURRENCY = Math.max(1, Number(process.env.AI_USER_CONCURRENCY) || 1);
+const AI_GLOBAL_CONCURRENCY = Math.max(1, Number(process.env.AI_GLOBAL_CONCURRENCY) || 4);
+const AI_COST_RESERVE_PER_REQUEST = Math.max(0.000001, Number(process.env.AI_COST_RESERVE_PER_REQUEST) || 0.01);
 
 app.use(cors());
 app.use(express.json());
@@ -565,7 +568,7 @@ function getAiDailyRequestCount(userId) {
   const row = db.prepare(`
     SELECT COUNT(*) AS count
     FROM ai_usage_logs
-    WHERE user_id = ? AND date(created_at) = date('now')
+    WHERE user_id = ? AND date(created_at) = date('now') AND output_status != 'cancelled'
   `).get(userId);
   return row.count || 0;
 }
@@ -621,17 +624,52 @@ function requireAiReady(res, feature) {
   return true;
 }
 
-function requireAiQuota(res, userId) {
+const reserveAiQuota = db.transaction((userId) => {
+  // A crashed worker's reservation expires, with its estimated charge retained until reconciled.
+  db.prepare(`UPDATE ai_usage_logs SET output_status = 'error', cost_credits = reserved_cost_credits
+    WHERE output_status = 'pending' AND reservation_expires_at <= datetime('now')`).run();
   if (getAiDailyRequestCount(userId) >= AI_DAILY_LIMIT) {
-    res.status(429).json({ code: 429, message: '今日 AI 使用次数已达上限' });
-    return false;
+    return { message: '今日 AI 使用次数已达上限' };
   }
+  const pending = db.prepare(`SELECT COUNT(*) AS total,
+    SUM(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS mine,
+    SUM(reserved_cost_credits) AS cost FROM ai_usage_logs WHERE output_status = 'pending'`).get(userId);
+  if (pending.mine >= AI_USER_CONCURRENCY || pending.total >= AI_GLOBAL_CONCURRENCY) {
+    return { message: 'AI 正在处理请求，请稍后重试' };
+  }
+  const reservedCost = AI_DAILY_COST_LIMIT > 0 && AI_PROVIDER !== 'mock' ? AI_COST_RESERVE_PER_REQUEST : 0;
   if (AI_DAILY_COST_LIMIT > 0) {
-    if (getAiDailyCostUsed() >= AI_DAILY_COST_LIMIT) {
-      res.status(429).json({ code: 429, message: '今日 AI 成本预算已达上限' });
-      return false;
+    const usedCost = getAiDailyCostUsed();
+    if (usedCost >= AI_DAILY_COST_LIMIT || usedCost + (pending.cost || 0) + reservedCost > AI_DAILY_COST_LIMIT) {
+      return { message: '今日 AI 成本预算已达上限' };
     }
   }
+  const leaseSeconds = Math.ceil((AI_TIMEOUT_MS + 1000) * (AI_RETRY_COUNT + 1) / 1000) + 10;
+  const result = db.prepare(`INSERT INTO ai_usage_logs
+    (user_id, feature, output_status, provider, model, reserved_cost_credits, reservation_expires_at)
+    VALUES (?, 'pending', 'pending', ?, ?, ?, datetime('now', ?))
+  `).run(userId, AI_PROVIDER, getAiModel(), reservedCost, `+${leaseSeconds} seconds`);
+  return { id: result.lastInsertRowid };
+});
+
+function requireAiQuota(res, userId) {
+  let reservation;
+  try {
+    reservation = reserveAiQuota.immediate(userId);
+  } catch (error) {
+    console.error('AI quota reservation failed:', error.code || error.name);
+    res.status(503).json({ code: 503, message: 'AI 请求暂时无法排队，请稍后重试' });
+    return false;
+  }
+  if (reservation.message) {
+    res.status(429).json({ code: 429, message: reservation.message });
+    return false;
+  }
+  res.locals.aiUsageId = reservation.id;
+  res.once('finish', () => {
+    db.prepare("UPDATE ai_usage_logs SET output_status = 'cancelled', reserved_cost_credits = 0 WHERE id = ? AND output_status = 'pending'")
+      .run(reservation.id);
+  });
   return true;
 }
 
@@ -639,13 +677,12 @@ function hashAiInput(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value || {})).digest('hex');
 }
 
-function logAiUsage({ userId, feature, input, outputStatus, startedAt, aiMeta = {} }) {
+function logAiUsage({ res, userId, feature, input, outputStatus, startedAt, aiMeta = {} }) {
   db.prepare(`
-    INSERT INTO ai_usage_logs (
-      user_id, feature, input_hash, output_status, provider, model, latency_ms,
-      provider_request_id, prompt_tokens, completion_tokens, total_tokens, cost_credits
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    UPDATE ai_usage_logs SET user_id = ?, feature = ?, input_hash = ?, output_status = ?,
+      provider = ?, model = ?, latency_ms = ?, provider_request_id = ?, prompt_tokens = ?,
+      completion_tokens = ?, total_tokens = ?, cost_credits = ?, reserved_cost_credits = 0,
+      reservation_expires_at = NULL WHERE id = ?
   `).run(
     userId || null,
     feature,
@@ -658,7 +695,8 @@ function logAiUsage({ userId, feature, input, outputStatus, startedAt, aiMeta = 
     aiMeta.promptTokens ?? null,
     aiMeta.completionTokens ?? null,
     aiMeta.totalTokens ?? null,
-    aiMeta.costCredits ?? null
+    aiMeta.costCredits ?? null,
+    res.locals.aiUsageId
   );
 }
 
@@ -1275,7 +1313,7 @@ app.post(
   '/api/register',
   [
     body('nickname').trim().isLength({ min: 1, max: 20 }).withMessage('昵称 1-20 字'),
-    body('password').isLength({ min: 6 }).withMessage('密码至少 6 位'),
+    body('password').isString().withMessage('密码必须是文本').bail().isLength({ min: 6, max: 256 }).withMessage('密码应为 6-256 位'),
     body('phone').optional().trim(),
     body('wechat').optional().trim(),
   ],
@@ -1288,8 +1326,8 @@ app.post(
     if (!phone && !wechat) {
       return res.status(400).json({ code: 400, message: '请填写手机号或微信号' });
     }
-    const password_hash = await bcrypt.hash(password, 10);
     try {
+      const password_hash = await bcrypt.hash(password, 10);
       const r = db.prepare(
         'INSERT INTO users (nickname, password_hash, phone, wechat) VALUES (?, ?, ?, ?)'
       ).run(nickname, password_hash, phone || null, wechat || null);
@@ -1313,27 +1351,31 @@ app.post(
   [
     body('phone').optional().trim(),
     body('wechat').optional().trim(),
-    body('password').notEmpty().withMessage('请输入密码'),
+    body('password').isString().withMessage('密码必须是文本').bail().isLength({ min: 1, max: 256 }).withMessage('请输入有效密码'),
   ],
-  async (req, res) => {
-    const { phone, wechat, password } = req.body;
-    if (!phone && !wechat) {
-      return res.status(400).json({ code: 400, message: '请填写手机号或微信号' });
+  async (req, res, next) => {
+    if (!requireValidation(req, res)) return;
+    try {
+      const { phone, wechat, password } = req.body;
+      if (!phone && !wechat) {
+        return res.status(400).json({ code: 400, message: '请填写手机号或微信号' });
+      }
+      const query = phone
+        ? 'SELECT id, nickname, password_hash FROM users WHERE phone = ?'
+        : 'SELECT id, nickname, password_hash FROM users WHERE wechat = ?';
+      const user = db.prepare(query).get(phone || wechat);
+      if (!user) {
+        return res.status(401).json({ code: 401, message: '用户不存在' });
+      }
+      const ok = await bcrypt.compare(password, user.password_hash);
+      if (!ok) {
+        return res.status(401).json({ code: 401, message: '密码错误' });
+      }
+      const token = sign(user.id);
+      res.json({ code: 0, data: { token, userId: user.id, nickname: user.nickname } });
+    } catch (error) {
+      next(error);
     }
-    // 根据哪个字段有值来动态构建查询条件
-    const query = phone 
-      ? 'SELECT id, nickname, password_hash FROM users WHERE phone = ?'
-      : 'SELECT id, nickname, password_hash FROM users WHERE wechat = ?';
-    const user = db.prepare(query).get(phone || wechat);
-    if (!user) {
-      return res.status(401).json({ code: 401, message: '用户不存在' });
-    }
-    const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) {
-      return res.status(401).json({ code: 401, message: '密码错误' });
-    }
-    const token = sign(user.id);
-    res.json({ code: 0, data: { token, userId: user.id, nickname: user.nickname } });
   }
 );
 
@@ -1521,10 +1563,10 @@ app.post(
     try {
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
       const result = await ai.generateSessionDraft(getAiConfig(), req.body.prompt, profile, AI_OPTIONS);
-      logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      logAiUsage({ res, userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
       res.json({ code: 0, data: { draft: result.data, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      logAiUsage({ res, userId: req.userId, feature: 'sessionDraft', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成发布草稿失败');
     }
   }
@@ -1546,15 +1588,15 @@ app.post(
     try {
       const session = getSessionRow(sessionId);
       if (!session) {
-        logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'not_found', startedAt });
+        logAiUsage({ res, userId: req.userId, feature: 'requestMessage', input, outputStatus: 'not_found', startedAt });
         return res.status(404).json({ code: 404, message: '游戏局不存在' });
       }
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
       const result = await ai.generateRequestMessage(getAiConfig(), profile, session);
-      logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      logAiUsage({ res, userId: req.userId, feature: 'requestMessage', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
       res.json({ code: 0, data: { message: result.data, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'requestMessage', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      logAiUsage({ res, userId: req.userId, feature: 'requestMessage', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成申请留言失败');
     }
   }
@@ -1576,16 +1618,16 @@ app.post(
     try {
       const session = getSessionRow(sessionId);
       if (!session) {
-        logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'not_found', startedAt });
+        logAiUsage({ res, userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'not_found', startedAt });
         return res.status(404).json({ code: 404, message: '游戏局不存在' });
       }
       const profile = serializeProfile(db.prepare('SELECT * FROM profiles WHERE user_id = ?').get(req.userId));
       const match = scoreSessionMatch(session, profile);
       const result = await ai.generateMatchExplanation(getAiConfig(), profile, session, match.reasons);
-      logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      logAiUsage({ res, userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
       res.json({ code: 0, data: { explanation: result.data, reasons: match.reasons, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      logAiUsage({ res, userId: req.userId, feature: 'matchExplanation', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成匹配说明失败');
     }
   }
@@ -1605,14 +1647,14 @@ app.post(
     try {
       const session = getSessionRow(sessionId);
       if (!session) {
-        logAiUsage({ userId: req.userId, feature: 'gameGuide', input, outputStatus: 'not_found', startedAt });
+        logAiUsage({ res, userId: req.userId, feature: 'gameGuide', input, outputStatus: 'not_found', startedAt });
         return res.status(404).json({ code: 404, message: '游戏局不存在' });
       }
       const result = await ai.generateGameGuide(getAiConfig(), session);
-      logAiUsage({ userId: req.userId, feature: 'gameGuide', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      logAiUsage({ res, userId: req.userId, feature: 'gameGuide', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
       res.json({ code: 0, data: { guide: result.data, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'gameGuide', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      logAiUsage({ res, userId: req.userId, feature: 'gameGuide', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成玩法攻略失败');
     }
   }
@@ -1632,7 +1674,7 @@ app.post(
     try {
       const script = db.prepare('SELECT * FROM scripts WHERE id = ?').get(scriptId);
       if (!script) {
-        logAiUsage({ userId: req.userId, feature: 'scriptExplanation', input, outputStatus: 'not_found', startedAt });
+        logAiUsage({ res, userId: req.userId, feature: 'scriptExplanation', input, outputStatus: 'not_found', startedAt });
         return res.status(404).json({ code: 404, message: '剧本不存在' });
       }
       const profileRow = db.prepare('SELECT taste_profile FROM profiles WHERE user_id = ?').get(req.userId) || {};
@@ -1640,10 +1682,10 @@ app.post(
       const state = getScriptState(req.userId, scriptId);
       const match = bookRecommendation.scoreBook(script, tasteProfile, state);
       const result = await ai.generateScriptExplanation(getAiConfig(), tasteProfile, script, match.reasons);
-      logAiUsage({ userId: req.userId, feature: 'scriptExplanation', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      logAiUsage({ res, userId: req.userId, feature: 'scriptExplanation', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
       res.json({ code: 0, data: { explanation: result.data, reasons: match.reasons, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'scriptExplanation', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      logAiUsage({ res, userId: req.userId, feature: 'scriptExplanation', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成选本说明失败');
     }
   }
@@ -1663,14 +1705,14 @@ app.post(
     try {
       const script = getScriptForAi(scriptId);
       if (!script) {
-        logAiUsage({ userId: req.userId, feature: 'playPrep', input, outputStatus: 'not_found', startedAt });
+        logAiUsage({ res, userId: req.userId, feature: 'playPrep', input, outputStatus: 'not_found', startedAt });
         return res.status(404).json({ code: 404, message: '剧本不存在' });
       }
       const result = await ai.generatePlayPrep(getAiConfig(), script);
-      logAiUsage({ userId: req.userId, feature: 'playPrep', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      logAiUsage({ res, userId: req.userId, feature: 'playPrep', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
       res.json({ code: 0, data: { prep: result.data, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'playPrep', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      logAiUsage({ res, userId: req.userId, feature: 'playPrep', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成开场准备失败');
     }
   }
@@ -1696,14 +1738,14 @@ app.post(
     try {
       const script = getScriptForAi(scriptId);
       if (!script) {
-        logAiUsage({ userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'not_found', startedAt });
+        logAiUsage({ res, userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'not_found', startedAt });
         return res.status(404).json({ code: 404, message: '剧本不存在' });
       }
       const result = await ai.generateStuckCoach(getAiConfig(), script, question, notes);
-      logAiUsage({ userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      logAiUsage({ res, userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
       res.json({ code: 0, data: { coach: result.data, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      logAiUsage({ res, userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成卡点梳理失败');
     }
   }
@@ -1735,14 +1777,14 @@ app.post(
     try {
       const script = getScriptForAi(scriptId);
       if (!script) {
-        logAiUsage({ userId: req.userId, feature: 'playRecap', input, outputStatus: 'not_found', startedAt });
+        logAiUsage({ res, userId: req.userId, feature: 'playRecap', input, outputStatus: 'not_found', startedAt });
         return res.status(404).json({ code: 404, message: '剧本不存在' });
       }
       const result = await ai.generatePlayRecap(getAiConfig(), script, record, notes);
-      logAiUsage({ userId: req.userId, feature: 'playRecap', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      logAiUsage({ res, userId: req.userId, feature: 'playRecap', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
       res.json({ code: 0, data: { recap: result.data, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'playRecap', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      logAiUsage({ res, userId: req.userId, feature: 'playRecap', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成打后复盘失败');
     }
   }
@@ -1769,10 +1811,10 @@ app.post(
     const startedAt = Date.now();
     try {
       const result = await ai.classifyReport(getAiConfig(), input, AI_OPTIONS);
-      logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+      logAiUsage({ res, userId: req.userId, feature: 'reportClassification', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
       res.json({ code: 0, data: { classification: result.data, provider: AI_PROVIDER, model: getAiModel() } });
     } catch (error) {
-      logAiUsage({ userId: req.userId, feature: 'reportClassification', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+      logAiUsage({ res, userId: req.userId, feature: 'reportClassification', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
       sendAiError(res, error, '生成举报归类失败');
     }
   }
@@ -1787,7 +1829,7 @@ app.get('/api/ai/ops-summary', requireAuth, async (req, res) => {
     const snapshot = getOpsSignalSnapshot(req.userId);
     const result = await ai.generateOpsSummary(getAiConfig(), snapshot);
     const summary = result.data;
-    logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+    logAiUsage({ res, userId: req.userId, feature: 'opsSummary', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
     res.json({
       code: 0,
       data: {
@@ -1802,7 +1844,7 @@ app.get('/api/ai/ops-summary', requireAuth, async (req, res) => {
       },
     });
   } catch (error) {
-    logAiUsage({ userId: req.userId, feature: 'opsSummary', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+    logAiUsage({ res, userId: req.userId, feature: 'opsSummary', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
     sendAiError(res, error, '生成运营摘要失败');
   }
 });
@@ -2788,6 +2830,13 @@ app.get('/api/ops/stats', requireAuth, (req, res) => {
     code: 0,
     data: getOpsStats(req.userId),
   });
+});
+
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  const status = error.status === 400 || error.status === 413 ? error.status : 500;
+  if (status === 500) console.error('API request failed:', error.name);
+  res.status(status).json({ code: status, message: status === 500 ? '请求处理失败，请稍后重试' : '请求格式无效' });
 });
 
 app.listen(PORT, '0.0.0.0', () => {

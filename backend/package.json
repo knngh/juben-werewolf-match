@@ -4,8 +4,9 @@
   "description": "桌游搭子匹配 API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "WECHAT_LOGIN_DEV_MODE=true AI_ENABLED=true AI_PROVIDER=mock node server.js",
+    "start": "NODE_ENV=production node server.js",
+    "dev": "NODE_ENV=development WECHAT_LOGIN_DEV_MODE=true AI_ENABLED=true AI_PROVIDER=mock node server.js",
+    "test:safety": "node --test scripts/test-safety-regressions.js",
     "smoke:sessions": "node scripts/smoke-sessions.js",
     "seed:demo": "node scripts/seed-demo.js",
     "backup:db": "node scripts/backup-db.js",

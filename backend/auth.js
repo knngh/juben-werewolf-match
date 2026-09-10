@@ -1,6 +1,15 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const configuredSecret = (process.env.JWT_SECRET || '').trim();
+if (process.env.NODE_ENV === 'production') {
+  if (configuredSecret.length < 32 || /^(dev-secret|your-)|change-in-production/i.test(configuredSecret)) {
+    throw new Error('JWT_SECRET must be a non-example secret of at least 32 characters in production');
+  }
+  if (process.env.WECHAT_LOGIN_DEV_MODE === 'true') {
+    throw new Error('WECHAT_LOGIN_DEV_MODE must be disabled in production');
+  }
+}
+const JWT_SECRET = configuredSecret || 'dev-secret';
 
 function sign(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
@@ -8,8 +17,8 @@ function sign(userId) {
 
 function verify(token) {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    return decoded.userId;
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    return Number.isSafeInteger(decoded.userId) && decoded.userId > 0 ? decoded.userId : null;
   } catch {
     return null;
   }

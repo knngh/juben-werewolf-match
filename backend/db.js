@@ -255,6 +255,8 @@ ensureColumn('ai_usage_logs', 'prompt_tokens', 'INTEGER');
 ensureColumn('ai_usage_logs', 'completion_tokens', 'INTEGER');
 ensureColumn('ai_usage_logs', 'total_tokens', 'INTEGER');
 ensureColumn('ai_usage_logs', 'cost_credits', 'REAL');
+ensureColumn('ai_usage_logs', 'reserved_cost_credits', 'REAL NOT NULL DEFAULT 0');
+ensureColumn('ai_usage_logs', 'reservation_expires_at', 'TEXT');
 
 db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mp_openid ON users(mp_openid) WHERE mp_openid IS NOT NULL;
