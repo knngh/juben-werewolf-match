@@ -44,7 +44,7 @@ Page({
           : res.data.minPlayers + '-' + res.data.maxPlayers + ' 人',
         matchScoreText: res.data.matchScore === null || res.data.matchScore === undefined
           ? ''
-          : res.data.matchScore + '%',
+          : res.data.matchScore + ' 分',
       });
       this.setData({ loading: false, script });
       if (api.getToken()) {
@@ -85,7 +85,7 @@ Page({
         wx.showToast({ title: res.message || '操作失败', icon: 'none' });
         return;
       }
-      wx.showToast({ title: '已减少此类推荐', icon: 'none' });
+      wx.showToast({ title: '已跳过这本', icon: 'none' });
       setTimeout(() => wx.switchTab({ url: '/pages/scripts/index' }), 350);
     });
   },

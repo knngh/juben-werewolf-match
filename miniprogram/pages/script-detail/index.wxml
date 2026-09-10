@@ -10,9 +10,9 @@
       <text class="detail-description">{{script.description}}</text>
       <view wx:if="{{script.matchScoreText}}" class="detail-match">
         <text class="detail-score">{{script.matchScoreText}}</text>
-        <text class="detail-score-label">与你的口味匹配</text>
+        <text class="detail-score-label">口味适配参考</text>
       </view>
-      <text wx:else class="detail-match-pending">完成口味测试后查看匹配度</text>
+      <text wx:else class="detail-match-pending">口味待完善</text>
     </view>
 
     <view class="tag-row detail-tags">

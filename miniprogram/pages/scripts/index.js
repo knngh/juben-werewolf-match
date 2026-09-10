@@ -10,7 +10,7 @@ function durationText(minutes) {
 }
 
 function matchLevel(score) {
-  if (score >= 80) return '高度匹配';
+  if (score >= 80) return '优先考虑';
   if (score >= 60) return '值得优先看';
   if (score > 0) return '可以了解';
   return '';
@@ -23,11 +23,11 @@ function enrichScript(item) {
     playerText: item.minPlayers === item.maxPlayers
       ? item.minPlayers + ' 人'
       : item.minPlayers + '-' + item.maxPlayers + ' 人',
-    matchScoreText: scoreVisible ? item.matchScore + '%' : '',
+    matchScoreText: scoreVisible ? item.matchScore + ' 分' : '',
     matchLevel: scoreVisible ? matchLevel(item.matchScore) : '',
     primaryReason: item.matchReasons && item.matchReasons.length ? item.matchReasons[0] : '',
     highlightText: item.highlights && item.highlights.length ? item.highlights[0] : '查看详情了解亮点',
-    warningText: item.warnings && item.warnings.length ? item.warnings[0] : '暂无明显雷点',
+    warningText: item.warnings && item.warnings.length ? item.warnings[0] : '内容风险待确认',
   });
 }
 
@@ -43,12 +43,21 @@ Page({
     resultCountText: '--',
     savedCount: 0,
     highMatchCount: 0,
+    hasMore: false,
+    nextOffset: 0,
+    loadingMore: false,
     scripts: [],
     filters: {
       q: '',
       gameType: '',
       difficulty: '',
+      collection: '',
     },
+    collections: [
+      { label: '推荐', value: '', active: true },
+      { label: '收藏', value: 'saved', active: false },
+      { label: '已跳过', value: 'dismissed', active: false },
+    ],
     gameTypes: [
       { label: '全部', value: '', active: true },
       { label: '剧本杀', value: '剧本杀', active: false },
@@ -81,20 +90,29 @@ Page({
     this.load().then(() => wx.stopPullDownRefresh());
   },
 
-  load() {
+  load(append) {
+    append = append === true;
     const loadId = this.loadId = (this.loadId || 0) + 1;
-    const loggedIn = !!api.getToken();
-    this.setData({ loggedIn, loading: true });
+    const token = api.getToken();
+    const loggedIn = !!token;
+    if (this.ownerToken !== token) {
+      this.ownerToken = token;
+      this.setData({ scripts: [], tasteCompleted: false, hasMore: false, nextOffset: 0, savedCount: 0, highMatchCount: 0 });
+    }
+    this.setData({ loggedIn, loading: !append, loadingMore: append });
     const tastePromise = loggedIn
       ? api.get('/api/taste-profile')
       : Promise.resolve({ code: 0, data: { completedAt: '' } });
-    const query = api.toQuery(this.data.filters);
+    const query = api.toQuery(Object.assign({}, this.data.filters, { offset: append ? this.data.nextOffset : 0 }));
     return Promise.all([api.get('/api/scripts' + query), tastePromise]).then(([scriptsRes, tasteRes]) => {
-      if (loadId !== this.loadId) return;
-      const next = { loading: false, loadError: '', loadErrorHint: '' };
+      if (loadId !== this.loadId || token !== api.getToken()) return;
+      const next = { loading: false, loadingMore: false, loadError: '', loadErrorHint: '' };
       if (scriptsRes.code === 0 && Array.isArray(scriptsRes.data)) {
-        next.scripts = scriptsRes.data.map(enrichScript);
-        next.resultCountText = next.scripts.length + ' 本候选';
+        const incoming = scriptsRes.data.map(enrichScript);
+        next.scripts = append ? this.data.scripts.concat(incoming.filter((item) => !this.data.scripts.some((previous) => previous.id === item.id))) : incoming;
+        next.hasMore = !!(scriptsRes.pagination && scriptsRes.pagination.hasMore);
+        next.nextOffset = scriptsRes.pagination && scriptsRes.pagination.nextOffset || 0;
+        next.resultCountText = (scriptsRes.pagination ? scriptsRes.pagination.total : next.scripts.length) + ' 本候选';
         next.savedCount = next.scripts.filter((item) => item.saved).length;
         next.highMatchCount = next.scripts.filter((item) => item.matchScore >= 80).length;
       } else {
@@ -114,9 +132,13 @@ Page({
         : '先看亮点，再看雷点，把“今天玩什么”变成一个更轻松的决定。';
       this.setData(next);
     }).catch(() => {
-      if (loadId !== this.loadId) return;
-      this.setData({ loading: false, loadError: '加载失败，请重试', loadErrorHint: '' });
+      if (loadId !== this.loadId || token !== api.getToken()) return;
+      this.setData({ loading: false, loadingMore: false, loadError: '加载失败，请重试', loadErrorHint: '' });
     });
+  },
+
+  loadMore() {
+    if (!this.data.loading && !this.data.loadingMore && this.data.hasMore) return this.load(true);
   },
 
   onSearchInput(event) {
@@ -126,6 +148,10 @@ Page({
   applyFilter(event) {
     const field = event.currentTarget.dataset.field;
     const value = event.currentTarget.dataset.value || '';
+    if (field === 'collection' && value && !api.getToken()) {
+      wx.navigateTo({ url: navigation.loginUrlWithRedirect() });
+      return;
+    }
     this.setData({ ['filters.' + field]: value });
     this.refreshFilterRows();
     this.load();
@@ -139,6 +165,7 @@ Page({
       difficulties: this.data.difficulties.map((item) => Object.assign({}, item, {
         active: item.value === this.data.filters.difficulty,
       })),
+      collections: this.data.collections.map((item) => Object.assign({}, item, { active: item.value === this.data.filters.collection })),
     });
   },
 
@@ -182,17 +209,18 @@ Page({
 
   dismiss(event) {
     const id = Number(event.currentTarget.dataset.id);
+    const dismissed = event.currentTarget.dataset.dismissed === true || event.currentTarget.dataset.dismissed === 'true';
     if (!api.getToken()) {
       wx.navigateTo({ url: navigation.loginUrlWithRedirect() });
       return;
     }
-    api.post('/api/scripts/' + id + '/action', { action: 'dismiss' }).then((res) => {
+    api.post('/api/scripts/' + id + '/action', { action: dismissed ? 'restore' : 'dismiss' }).then((res) => {
       if (res.code !== 0) {
         wx.showToast({ title: res.message || '操作失败', icon: 'none' });
         return;
       }
-      this.setData({ scripts: this.data.scripts.filter((item) => item.id !== id) });
-      wx.showToast({ title: '已减少此类推荐', icon: 'none' });
+      this.load();
+      wx.showToast({ title: dismissed ? '已恢复推荐' : '已跳过这本', icon: 'none' });
     });
   },
 

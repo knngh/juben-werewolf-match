@@ -52,6 +52,9 @@ Page({
     loadErrorHint: '',
     loggedIn: false,
     scripts: [],
+    hasMoreScripts: false,
+    nextScriptOffset: 0,
+    loadingMoreScripts: false,
     scriptId: 0,
     selectedScript: null,
     noteCategories: NOTE_CATEGORIES,
@@ -111,6 +114,7 @@ Page({
     this.loadVersion = (this.loadVersion || 0) + 1;
     this.loadPromise = null;
     this.setData({ ...freshWorkspace(), scripts: [], scriptId: 0, selectedScript: null, records: [],
+      hasMoreScripts: false, nextScriptOffset: 0, loadingMoreScripts: false,
       loggedIn: false, loadError: '', loadErrorHint: '' });
   },
 
@@ -196,7 +200,7 @@ Page({
     this.setData({ loading: true, loggedIn: true });
     const loadVersion = this.loadVersion = (this.loadVersion || 0) + 1;
     const pending = Promise.all([
-      api.get('/api/scripts'),
+      api.get('/api/scripts?catalog=1&limit=100'),
       api.get('/api/play-records'),
     ]).then(async ([scriptsRes, recordsRes]) => {
       if (api.getToken() !== token || loadVersion !== this.loadVersion) return;
@@ -228,6 +232,8 @@ Page({
         scripts,
         scriptId: selectedScript ? selectedScript.id : 0,
         selectedScript,
+        hasMoreScripts: !!(scriptsRes.pagination && scriptsRes.pagination.hasMore),
+        nextScriptOffset: scriptsRes.pagination && scriptsRes.pagination.nextOffset || 0,
         records: recordsReady ? recordsRes.data.records : this.data.records,
       });
       this.pendingScriptId = 0;
@@ -240,6 +246,26 @@ Page({
     });
     this.loadPromise = pending;
     return pending;
+  },
+
+  loadMoreScripts() {
+    if (!this.data.hasMoreScripts || this.data.loadingMoreScripts) return;
+    const token = api.getToken();
+    const version = this.loadVersion;
+    this.setData({ loadingMoreScripts: true });
+    return api.get('/api/scripts?catalog=1&limit=100&offset=' + this.data.nextScriptOffset).then((res) => {
+      if (token !== api.getToken() || version !== this.loadVersion) return;
+      if (res.code !== 0 || !Array.isArray(res.data)) {
+        wx.showToast({ title: res.message || '目录加载失败', icon: 'none' });
+        return;
+      }
+      const scripts = this.data.scripts.slice();
+      res.data.forEach((item) => { if (!scripts.some((previous) => previous.id === item.id)) scripts.push(item); });
+      this.setData({ scripts, hasMoreScripts: !!(res.pagination && res.pagination.hasMore),
+        nextScriptOffset: res.pagination && res.pagination.nextOffset || 0 });
+    }).catch(() => wx.showToast({ title: '目录加载失败', icon: 'none' })).then(() => {
+      if (token === api.getToken() && version === this.loadVersion) this.setData({ loadingMoreScripts: false });
+    });
   },
 
   onScriptPickerChange(event) {

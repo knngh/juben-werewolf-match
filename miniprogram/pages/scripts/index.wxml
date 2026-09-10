@@ -14,7 +14,7 @@
     <text class="hero-title">{{heroTitle}}</text>
     <text class="hero-desc">{{heroDesc}}</text>
     <view class="hero-metrics">
-      <view class="metric"><text class="metric-value">{{highMatchCount}}</text><text class="metric-label">高匹配</text></view>
+      <view class="metric"><text class="metric-value">{{highMatchCount}}</text><text class="metric-label">优先候选</text></view>
       <view class="metric"><text class="metric-value">{{savedCount}}</text><text class="metric-label">已收藏</text></view>
       <view class="metric"><text class="metric-value">{{resultCountText}}</text><text class="metric-label">本次候选</text></view>
     </view>
@@ -22,7 +22,7 @@
 
   <view wx:if="{{!loggedIn || !tasteCompleted}}" class="taste-banner">
     <view class="taste-copy">
-      <text class="taste-title">{{loggedIn ? '还差一步，解锁匹配度' : '3 分钟找到更适合你的本'}}</text>
+      <text class="taste-title">{{loggedIn ? '还差一步，生成口味画像' : '3 分钟找到更适合你的本'}}</text>
       <text class="taste-desc">{{loggedIn ? '完成 4 道口味题，推荐会结合偏好与雷点排序。' : '未登录也能浏览；登录完成测试后可收藏、跳过并获得个性化理由。'}}</text>
     </view>
     <button class="btn btn-primary banner-btn" bindtap="goTasteTest">开始测试</button>
@@ -33,6 +33,9 @@
     <button class="search-btn" bindtap="load">搜索</button>
   </view>
 
+  <view class="filter-row">
+    <button wx:for="{{collections}}" wx:key="value" class="filter-chip {{item.active ? 'filter-active' : ''}}" data-field="collection" data-value="{{item.value}}" bindtap="applyFilter">{{item.label}}</button>
+  </view>
   <scroll-view scroll-x class="filter-scroll" show-scrollbar="{{false}}">
     <view class="filter-row">
       <button wx:for="{{gameTypes}}" wx:key="value" class="filter-chip {{item.active ? 'filter-active' : ''}}" data-field="gameType" data-value="{{item.value}}" bindtap="applyFilter">{{item.label}}</button>
@@ -50,7 +53,7 @@
     <text class="empty-hint">换个关键词或筛选条件再试试</text>
   </view>
   <view wx:elif="{{scripts.length}}" class="script-list">
-    <view class="list-heading"><view><text class="list-title">推荐清单</text><text class="list-subtitle">先看匹配度，再决定要不要深入了解</text></view><text class="list-count">{{resultCountText}}</text></view>
+    <view class="list-heading"><view><text class="list-title">{{filters.collection === 'saved' ? '我的收藏' : filters.collection === 'dismissed' ? '已跳过的本' : '推荐清单'}}</text></view><text class="list-count">{{resultCountText}}</text></view>
     <view wx:for="{{scripts}}" wx:key="id" class="script-card" data-id="{{item.id}}" bindtap="goDetail">
       <view class="script-head">
         <view class="type-line">
@@ -61,7 +64,7 @@
           <text class="match-score">{{item.matchScoreText}}</text>
           <text class="match-level">{{item.matchLevel}}</text>
         </view>
-        <text wx:else class="match-pending">测试后看匹配度</text>
+        <text wx:else class="match-pending">口味待完善</text>
       </view>
 
       <text class="script-title">{{item.title}}</text>
@@ -88,9 +91,10 @@
       </view>
 
       <view class="card-actions">
-        <button class="text-action" data-id="{{item.id}}" catchtap="dismiss">不感兴趣</button>
+        <button class="text-action" data-id="{{item.id}}" data-dismissed="{{item.dismissed}}" catchtap="dismiss">{{item.dismissed ? '恢复推荐' : '不感兴趣'}}</button>
         <button class="save-action {{item.saved ? 'save-active' : ''}}" data-id="{{item.id}}" data-saved="{{item.saved}}" catchtap="toggleSave">{{item.saved ? '已收藏' : '收藏'}}</button>
       </view>
     </view>
+    <button wx:if="{{hasMore}}" class="btn btn-secondary btn-full" loading="{{loadingMore}}" disabled="{{loadingMore}}" bindtap="loadMore">加载更多</button>
   </view>
 </view>

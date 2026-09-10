@@ -39,7 +39,7 @@ function loadPage(name, get) {
 }
 
 function healthy(pathname) {
-  if (pathname === '/api/scripts') return Promise.resolve({ code: 0, data: [script] });
+  if (pathname === '/api/scripts' || pathname.startsWith('/api/scripts?catalog=')) return Promise.resolve({ code: 0, data: [script] });
   if (pathname === '/api/play-records') return Promise.resolve({ code: 0, data: {
     records: [{ id: 1, scriptId: 1 }], summary: { total: 1, ratedCount: 1, averageRating: 5, typeCounts: [] },
   } });
@@ -99,7 +99,7 @@ test('tools: switching back after failure retries without a pending script ID', 
 test('tools: first onLoad/onShow issue only one load, and login return can load', async () => {
   const { page, api, storage } = loadPage('tools', healthy);
   let scriptRequests = 0;
-  api.get = (url) => { if (url === '/api/scripts') scriptRequests += 1; return healthy(url); };
+  api.get = (url) => { if (url.startsWith('/api/scripts?catalog=')) scriptRequests += 1; return healthy(url); };
   page.onLoad({});
   await page.onShow();
   assert.equal(scriptRequests, 1);

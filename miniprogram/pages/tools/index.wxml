@@ -18,6 +18,7 @@
       </picker>
     </view>
 
+    <button wx:if="{{hasMoreScripts}}" class="text-link" loading="{{loadingMoreScripts}}" disabled="{{loadingMoreScripts}}" bindtap="loadMoreScripts">加载更多剧本</button>
     <view class="tool-tabs">
       <button class="tool-tab {{activeTab === 'timer' ? 'tool-tab-active' : ''}}" data-tab="timer" bindtap="switchTab">计时器</button>
       <button class="tool-tab {{activeTab === 'notes' ? 'tool-tab-active' : ''}}" data-tab="notes" bindtap="switchTab">打本笔记</button>

@@ -3,7 +3,7 @@ require('./env')();
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-const { body, validationResult } = require('express-validator');
+const { body, query, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const { sign, middleware, requireAuth } = require('./auth');
 const db = require('./db');
@@ -136,12 +136,14 @@ function serializeScript(row, state = {}) {
     maxPlayers: row.max_players,
     highlights: parseJsonArray(row.highlights),
     warnings: parseJsonArray(row.warnings),
+    riskTags: bookRecommendation.riskTags(row),
     description: row.description || '',
     matchScore: state.matchScore,
     matchReasons: state.reasons || [],
     saved: !!state.saved,
     dismissed: !!state.dismissed,
     viewed: !!state.viewed,
+    played: !!state.played,
   };
 }
 
@@ -165,21 +167,38 @@ function getScriptRows(filters = {}) {
     SELECT * FROM scripts
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY id ASC
-    LIMIT 100
   `).all(...params);
 }
 
-function getScriptState(userId, scriptId) {
-  if (!userId) return { saved: false, dismissed: false, viewed: false };
-  const rows = db.prepare('SELECT action FROM script_actions WHERE user_id = ? AND script_id = ?').all(userId, scriptId);
-  return {
-    saved: rows.some((item) => item.action === 'save'),
-    dismissed: rows.some((item) => item.action === 'dismiss'),
-    viewed: rows.some((item) => item.action === 'view'),
-  };
+function getRecommendationContext(userId) {
+  const states = new Map();
+  if (!userId) return { states, tagPreferences: {} };
+  db.prepare('SELECT script_id, action FROM script_actions WHERE user_id = ?').all(userId).forEach((item) => {
+    const state = states.get(item.script_id) || {};
+    const field = { save: 'saved', dismiss: 'dismissed', view: 'viewed' }[item.action];
+    if (field) state[field] = true;
+    states.set(item.script_id, state);
+  });
+  const records = db.prepare(`SELECT r.script_id, s.tags, AVG(r.rating) AS rating
+    FROM play_records r JOIN scripts s ON s.id = r.script_id WHERE r.user_id = ? GROUP BY r.script_id`).all(userId);
+  records.forEach((item) => states.set(item.script_id, { ...states.get(item.script_id), played: true }));
+  return { states, tagPreferences: bookRecommendation.buildFeedbackPreferences(records) };
 }
 
-app.get('/api/scripts', (req, res) => {
+function getScriptState(userId, scriptId, context = getRecommendationContext(userId)) {
+  return { ...context.states.get(scriptId), tagPreferences: context.tagPreferences };
+}
+
+app.get('/api/scripts', [
+  query('catalog').optional().isIn(['0', '1']),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('offset').optional().isInt({ min: 0, max: 100000 }),
+  query('collection').optional({ checkFalsy: true }).isIn(['saved', 'dismissed']),
+], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const catalog = req.query.catalog === '1';
+  const limit = Number(req.query.limit) || 50;
+  const offset = Number(req.query.offset) || 0;
   const rows = getScriptRows({
     gameType: normalizeText(req.query.gameType, 20),
     difficulty: normalizeText(req.query.difficulty, 20),
@@ -188,22 +207,22 @@ app.get('/api/scripts', (req, res) => {
   const userId = req.userId || null;
   const profileRow = userId ? db.prepare('SELECT taste_profile FROM profiles WHERE user_id = ?').get(userId) : null;
   const tasteProfile = serializeTasteProfile(profileRow && profileRow.taste_profile);
+  const context = getRecommendationContext(userId);
   let scripts = rows.map((row) => {
-    const state = getScriptState(userId, row.id);
-    const match = userId ? bookRecommendation.scoreBook(row, tasteProfile, {
-      viewed: state.viewed,
-      saved: state.saved,
-      dismissed: state.dismissed,
-    }) : { score: 0, matchScore: null, reasons: [] };
+    const state = getScriptState(userId, row.id, context);
+    const match = userId ? bookRecommendation.scoreBook(row, tasteProfile, state) : { score: 0, matchScore: null, reasons: [] };
     return {
       ...serializeScript(row, { ...state, matchScore: match.matchScore, reasons: match.reasons }),
       matchScore: match.matchScore,
       matchReasons: match.reasons,
       _score: match.score,
     };
-  }).filter((item) => !item.dismissed);
-  scripts.sort((left, right) => right._score - left._score || left.id - right.id);
-  res.json({ code: 0, data: scripts.slice(0, 50).map(({ _score, ...item }) => item) });
+  }).filter((item) => req.query.collection === 'dismissed' ? item.dismissed
+    : req.query.collection === 'saved' ? item.saved : catalog || !item.dismissed);
+  if (!catalog) scripts.sort((left, right) => right._score - left._score || left.id - right.id);
+  res.json({ code: 0, data: scripts.slice(offset, offset + limit).map(({ _score, ...item }) => item),
+    pagination: { offset, limit, total: scripts.length, hasMore: offset + limit < scripts.length,
+      nextOffset: offset + limit < scripts.length ? offset + limit : null } });
 });
 
 app.get('/api/scripts/:id', (req, res) => {
@@ -214,11 +233,8 @@ app.get('/api/scripts/:id', (req, res) => {
   const userId = req.userId || null;
   const profileRow = userId ? db.prepare('SELECT taste_profile FROM profiles WHERE user_id = ?').get(userId) : null;
   const state = getScriptState(userId, id);
-  const match = userId ? bookRecommendation.scoreBook(row, serializeTasteProfile(profileRow && profileRow.taste_profile), {
-    viewed: state.viewed,
-    saved: state.saved,
-    dismissed: state.dismissed,
-  }) : { score: 0, matchScore: null, reasons: [] };
+  const match = userId ? bookRecommendation.scoreBook(row, serializeTasteProfile(profileRow && profileRow.taste_profile), state)
+    : { score: 0, matchScore: null, reasons: [] };
   res.json({ code: 0, data: serializeScript(row, { ...state, matchScore: match.matchScore, reasons: match.reasons }) });
 });
 
