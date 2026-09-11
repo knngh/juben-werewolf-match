@@ -22,14 +22,14 @@
 .archive-hero {
   margin-top: 28rpx;
   padding: 28rpx 26rpx;
-  border-radius: 12rpx;
-  background: #25352a;
+  border-radius: 10rpx;
+  background: #203b3a;
   color: #ffffff;
 }
 
 .archive-kicker {
   display: block;
-  color: #b8d8bf;
+  color: #d9c28f;
   font-size: 20rpx;
   font-weight: 700;
   letter-spacing: 1rpx;
@@ -58,9 +58,9 @@
 
 .stat-card {
   padding: 20rpx 10rpx;
-  border: 1rpx solid #dfe7dc;
-  border-radius: 10rpx;
-  background: #ffffff;
+  border: 1rpx solid #deded5;
+  border-radius: 8rpx;
+  background: #fffdf9;
   text-align: center;
 }
 
@@ -70,7 +70,7 @@
 }
 
 .stat-value {
-  color: #1f7a4d;
+  color: #b07835;
   font-size: 34rpx;
   font-weight: 800;
 }
@@ -89,9 +89,9 @@
 .type-list {
   margin-top: 16rpx;
   padding: 20rpx;
-  border: 1rpx solid #e0e6de;
-  border-radius: 10rpx;
-  background: #ffffff;
+  border: 1rpx solid #deded5;
+  border-radius: 8rpx;
+  background: #fffdf9;
 }
 
 .type-row {
@@ -118,12 +118,12 @@
 .type-bar view {
   height: 100%;
   border-radius: 6rpx;
-  background: #6aab7b;
+  background: #4f8b77;
 }
 
 .type-count {
   width: 26rpx;
-  color: #1f7a4d;
+  color: #245b58;
   text-align: right;
 }
 
@@ -138,7 +138,7 @@
 }
 
 .text-link {
-  color: #1f7a4d;
+  color: #245b58;
   font-size: 23rpx;
 }
 
@@ -187,7 +187,7 @@
 
 .record-rating {
   flex: 0 0 auto;
-  color: #1f7a4d;
+  color: #b07835;
   font-size: 25rpx;
   font-weight: 700;
 }

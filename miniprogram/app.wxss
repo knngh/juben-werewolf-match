@@ -1,7 +1,7 @@
 page {
   min-height: 100%;
-  background: #f7f8f4;
-  color: #20231f;
+  background: #f4f1e9;
+  color: #202a24;
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   font-size: 28rpx;
 }
@@ -35,22 +35,21 @@ textarea {
 }
 
 .page {
-  padding: 28rpx;
-  padding-bottom: 56rpx;
+  padding: 30rpx 28rpx 64rpx;
 }
 
 .title {
   display: block;
-  color: #172019;
-  font-size: 46rpx;
-  font-weight: 700;
+  color: #18251f;
+  font-size: 48rpx;
+  font-weight: 800;
   line-height: 1.2;
 }
 
 .subtitle {
   display: block;
   margin-top: 8rpx;
-  color: #697166;
+  color: #6f756d;
   font-size: 26rpx;
   line-height: 1.5;
 }
@@ -71,9 +70,9 @@ textarea {
   display: block;
   margin-top: 20rpx;
   padding: 24rpx;
-  border: 1rpx solid #e1e5da;
-  border-radius: 16rpx;
-  background: #ffffff;
+  border: 1rpx solid #e1ded5;
+  border-radius: 10rpx;
+  background: #fffdf9;
 }
 
 .toolbar {
@@ -111,10 +110,10 @@ textarea {
 .picker-value {
   min-height: 80rpx;
   padding: 20rpx 22rpx;
-  border: 1rpx solid #d8ded2;
-  border-radius: 12rpx;
-  background: #fbfcf8;
-  color: #20231f;
+  border: 1rpx solid #d8d8cf;
+  border-radius: 8rpx;
+  background: #fffdf9;
+  color: #202a24;
   font-size: 28rpx;
   line-height: 1.4;
 }
@@ -147,14 +146,14 @@ textarea {
 }
 
 .btn-primary {
-  background: #1f7a4d;
+  background: #245b58;
   color: #ffffff;
 }
 
 .btn-secondary {
-  border: 1rpx solid #cbd5c4;
-  background: #ffffff;
-  color: #2f5f45;
+  border: 1rpx solid #c9cec5;
+  background: #fffdf9;
+  color: #245b58;
 }
 
 .btn-danger {
@@ -187,9 +186,9 @@ textarea {
   min-height: 52rpx;
   align-items: center;
   padding: 0 18rpx;
-  border-radius: 999rpx;
-  background: #edf3e9;
-  color: #52604e;
+  border-radius: 6rpx;
+  background: #edf1eb;
+  color: #52625b;
   font-size: 24rpx;
 }
 
@@ -219,7 +218,8 @@ textarea {
 .loading {
   margin-top: 28rpx;
   padding: 56rpx 24rpx;
-  border: 1rpx dashed #cfd8c8;
+  border: 1rpx dashed #c8c9c1;
+  background: rgba(255, 253, 249, 0.72);
   border-radius: 16rpx;
   color: #697166;
   text-align: center;

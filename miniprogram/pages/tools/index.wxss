@@ -47,14 +47,14 @@
   align-items: flex-start;
   justify-content: space-between;
   padding: 24rpx;
-  border-radius: 12rpx;
-  background: #25352a;
+  border-radius: 10rpx;
+  background: #203b3a;
   color: #ffffff;
 }
 
 .eyebrow {
   display: block;
-  color: #b4d8bf;
+  color: #d9c28f;
   font-size: 20rpx;
   font-weight: 700;
   letter-spacing: 1rpx;
@@ -89,8 +89,8 @@
   gap: 8rpx;
   margin-top: 22rpx;
   padding: 6rpx;
-  border-radius: 10rpx;
-  background: #e8eee7;
+  border-radius: 8rpx;
+  background: #e1e5df;
 }
 
 .tool-tab {
@@ -105,7 +105,7 @@
 
 .tool-tab-active {
   background: #ffffff;
-  color: #1f7a4d;
+  color: #245b58;
   font-weight: 700;
 }
 
@@ -115,9 +115,9 @@
 
 .timer-card {
   padding: 30rpx 24rpx 24rpx;
-  border: 1rpx solid #dce6dd;
-  border-radius: 12rpx;
-  background: #f7fbf7;
+  border: 1rpx solid #deded5;
+  border-radius: 8rpx;
+  background: #fffdf9;
   text-align: center;
 }
 
@@ -136,14 +136,14 @@
 }
 
 .timer-caption text:last-child {
-  color: #1f7a4d;
+  color: #b07835;
   font-weight: 700;
 }
 
 .timer-text {
   display: block;
   margin-top: 20rpx;
-  color: #1c3022;
+  color: #203b3a;
   font-size: 92rpx;
   font-weight: 700;
   letter-spacing: 2rpx;
@@ -194,8 +194,8 @@
   margin-top: 16rpx;
   overflow: hidden;
   border: 1rpx solid #e0e5de;
-  border-radius: 10rpx;
-  background: #ffffff;
+  border-radius: 8rpx;
+  background: #fffdf9;
 }
 
 .segment-row {
@@ -214,8 +214,8 @@
 }
 
 .segment-active {
-  background: #eff7f0;
-  color: #1f7a4d;
+  background: #edf4ef;
+  color: #245b58;
   font-weight: 700;
 }
 
@@ -276,9 +276,9 @@
 }
 
 .category-active {
-  border-color: #1f7a4d;
-  background: #e9f4eb;
-  color: #1f7a4d;
+  border-color: #245b58;
+  background: #e5f0ec;
+  color: #245b58;
   font-weight: 700;
 }
 
@@ -290,8 +290,8 @@
   margin-top: 16rpx;
   padding: 22rpx;
   border: 1rpx solid #e0e6de;
-  border-radius: 10rpx;
-  background: #ffffff;
+  border-radius: 8rpx;
+  background: #fffdf9;
 }
 
 .note-textarea {
@@ -306,13 +306,13 @@
 .note-item {
   margin-top: 12rpx;
   padding: 18rpx;
-  border-left: 4rpx solid #b5d3bd;
+  border-left: 4rpx solid #b78b4b;
   border-radius: 8rpx;
-  background: #f7f9f5;
+  background: #f8f5ed;
 }
 
 .note-category {
-  color: #1f7a4d;
+  color: #245b58;
   font-size: 22rpx;
   font-weight: 700;
 }
@@ -376,9 +376,9 @@
 }
 
 .rating-active {
-  border-color: #1f7a4d;
-  background: #e8f4eb;
-  color: #1f7a4d;
+  border-color: #245b58;
+  background: #e5f0ec;
+  color: #245b58;
   font-weight: 700;
 }
 
@@ -423,8 +423,8 @@
   justify-content: space-between;
   padding: 18rpx;
   border: 1rpx solid #dfe7dc;
-  border-radius: 10rpx;
-  background: #ffffff;
+  border-radius: 8rpx;
+  background: #fffdf9;
 }
 
 .ai-action-copy {
@@ -462,8 +462,8 @@
   margin-top: 18rpx;
   padding: 20rpx;
   border: 1rpx solid #cfe2d2;
-  border-radius: 10rpx;
-  background: #f5faf5;
+  border-radius: 8rpx;
+  background: #f0f5f0;
 }
 
 .ai-result-head {
@@ -481,8 +481,8 @@
 .ai-result-badge {
   padding: 4rpx 10rpx;
   border-radius: 6rpx;
-  background: #d9eddd;
-  color: #1f7a4d;
+  background: #e7d7b4;
+  color: #6b4d21;
   font-size: 18rpx;
   font-weight: 800;
 }
