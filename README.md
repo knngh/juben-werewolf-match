@@ -4,6 +4,16 @@
 
 选本、笔记、计时和打卡可以由单个用户独立使用。新的改进方向与实施状态见 [单人主线改进计划](docs/solo-mvp-improvements.md)。
 
+当前单人 MVP 已完成首轮 1-5 闭环：
+
+- 本次选本条件：人数、最长时长、难度；先做条件过滤，再按口味排序。
+- 可解释对比：最多选择 3 本，展示适合点、冲突、风险和资料核验状态。
+- 单次游玩批次：笔记、角色和打本记录关联到同一次游玩，重玩不会串数据。
+- 体验归因：分别记录剧本内容、角色、主持和同桌体验；只有用户确认的内容反馈影响后续推荐。
+- 有来源的证据提示：AI 只能引用本人当前剧本、当前游玩批次中选定的笔记，并返回来源 ID、核查步骤和未知项。
+
+当前内容库仍包含示例资料，来源状态会明确标注，不能视为已获得真实授权的剧本内容。匹配、找局、组局、拼车和多人选本继续保持下线。
+
 当前方向不做实体店铺、商家后台、支付，也不纳入麻将、德州扑克、象棋、围棋、扑克等棋牌类游戏。
 
 ## 旧版能力（非小程序当前入口）
@@ -147,7 +157,15 @@ npm run dev
 5. 小程序微信登录需要后端 `.env` 配置 `WECHAT_MINIPROGRAM_APPID` 和 `WECHAT_MINIPROGRAM_SECRET`。
 6. 订阅消息模板 ID 配置在 `miniprogram/config.js` 的 `subscribeTemplateIds`，未配置时只保存站内提醒偏好。
 
-小程序首版页面：
+小程序当前单人页面：
+
+- 选本：口味推荐、保存/跳过、条件筛选、最多 3 本对比和来源状态。
+- 工具：单次游玩计时、批次笔记、AI 准备/卡点/复盘/证据提示。
+- 档案：整体评分、分项体验反馈、记录编辑删除和推荐反馈回看。
+
+小程序保留的历史社交页面（找局、发布、局详情、我的局、通知等）不属于当前单人主线入口。
+
+历史页面与接口：
 
 - 找局：筛选开放局、附近 20km、查看详情
 - 登录：支持微信登录，也保留手机号/微信号 + 密码登录
@@ -164,7 +182,15 @@ npm run dev
 
 ```bash
 node miniprogram/scripts/smoke-miniprogram.js
-node --test miniprogram/scripts/test-network-recovery.js
+node --test miniprogram/scripts/test-*.js
+```
+
+完整验证：
+
+```bash
+cd backend && npm test
+cd backend && npm run smoke:sessions
+cd frontend && npm run build
 ```
 
 ### 生产构建
