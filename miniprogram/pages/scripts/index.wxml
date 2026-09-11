@@ -33,7 +33,7 @@
     <button class="search-btn" bindtap="load">搜索</button>
   </view>
 
-  <view class="filter-row">
+  <view class="collection-row">
     <button wx:for="{{collections}}" wx:key="value" class="filter-chip {{item.active ? 'filter-active' : ''}}" data-field="collection" data-value="{{item.value}}" bindtap="applyFilter">{{item.label}}</button>
   </view>
   <scroll-view scroll-x class="filter-scroll" show-scrollbar="{{false}}">
@@ -91,8 +91,8 @@
       </view>
 
       <view class="card-actions">
-        <button class="text-action" data-id="{{item.id}}" data-dismissed="{{item.dismissed}}" catchtap="dismiss">{{item.dismissed ? '恢复推荐' : '不感兴趣'}}</button>
-        <button class="save-action {{item.saved ? 'save-active' : ''}}" data-id="{{item.id}}" data-saved="{{item.saved}}" catchtap="toggleSave">{{item.saved ? '已收藏' : '收藏'}}</button>
+        <button class="text-action" disabled="{{actionPending}}" data-id="{{item.id}}" data-dismissed="{{item.dismissed}}" catchtap="dismiss">{{item.dismissed ? '恢复推荐' : '不感兴趣'}}</button>
+        <button class="save-action {{item.saved ? 'save-active' : ''}}" disabled="{{actionPending}}" data-id="{{item.id}}" data-saved="{{item.saved}}" catchtap="toggleSave">{{item.saved ? '已收藏' : '收藏'}}</button>
       </view>
     </view>
     <button wx:if="{{hasMore}}" class="btn btn-secondary btn-full" loading="{{loadingMore}}" disabled="{{loadingMore}}" bindtap="loadMore">加载更多</button>

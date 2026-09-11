@@ -2,6 +2,23 @@
   padding-top: 22rpx;
 }
 
+.toolbar > view {
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar .btn,
+.archive-page .text-link {
+  width: auto;
+  flex-shrink: 0;
+}
+
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .archive-hero {
   margin-top: 28rpx;
   padding: 28rpx 26rpx;

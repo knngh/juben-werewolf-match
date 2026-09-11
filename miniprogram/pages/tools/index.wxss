@@ -3,6 +3,44 @@
   padding-bottom: 60rpx;
 }
 
+.tool-header > view {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-header picker {
+  flex-shrink: 0;
+}
+
+.tool-header .switch-script,
+.category-row .category-chip,
+.ai-action .btn,
+.item-actions .text-link,
+.editor-status .text-link {
+  width: auto;
+  flex-shrink: 0;
+}
+
+.note-editor .btn-full,
+.record-editor .btn-full {
+  width: 100%;
+}
+
+.switch-script,
+.tool-tab,
+.category-chip,
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-title,
+.note-content,
+.note-title {
+  overflow-wrap: anywhere;
+}
+
 .tool-header {
   display: flex;
   gap: 16rpx;
@@ -57,6 +95,8 @@
 
 .tool-tab {
   flex: 1;
+  width: 0;
+  min-width: 0;
   min-height: 66rpx;
   border-radius: 8rpx;
   color: #69766b;

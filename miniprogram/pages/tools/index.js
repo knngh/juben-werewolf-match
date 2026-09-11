@@ -509,6 +509,7 @@ Page({
     this.setData({ editingNoteId: note.id, noteSubmission: null, noteCategory: note.category,
       noteForm: { title: note.title || '', content: note.content }, activeTab: 'notes' });
     this.persistWorkspace();
+    if (wx.pageScrollTo) wx.pageScrollTo({ scrollTop: 0, duration: 200 });
   },
 
   cancelNoteEdit() {

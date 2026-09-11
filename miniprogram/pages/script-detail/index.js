@@ -29,9 +29,20 @@ Page({
     this.load(scriptId);
   },
 
+  onShow() {
+    if (this.data.scriptId && this.ownerToken !== api.getToken()) return this.load(this.data.scriptId);
+  },
+
   load(scriptId) {
+    const token = api.getToken();
+    const version = this.loadVersion = (this.loadVersion || 0) + 1;
+    if (this.ownerToken !== token) {
+      this.ownerToken = token;
+      this.setData({ script: null, explanation: '', explanationLoading: false, explanationReady: false });
+    }
     this.setData({ loading: true });
-    api.get('/api/scripts/' + scriptId).then((res) => {
+    return api.get('/api/scripts/' + scriptId).then((res) => {
+      if (version !== this.loadVersion || token !== api.getToken()) return;
       if (res.code !== 0 || !res.data) {
         this.setData({ loading: false });
         wx.showToast({ title: res.message || '剧本加载失败', icon: 'none' });
@@ -50,6 +61,10 @@ Page({
       if (api.getToken()) {
         api.post('/api/scripts/' + scriptId + '/action', { action: 'view' });
       }
+    }).catch(() => {
+      if (version !== this.loadVersion || token !== api.getToken()) return;
+      this.setData({ loading: false });
+      wx.showToast({ title: '剧本加载失败，请重试', icon: 'none' });
     });
   },
 
@@ -64,11 +79,13 @@ Page({
   },
 
   toggleSave() {
-    if (!this.requireLogin()) return;
+    if (!this.requireLogin() || !this.data.script) return;
+    const token = api.getToken();
     const saved = !!this.data.script.saved;
     api.post('/api/scripts/' + this.data.scriptId + '/action', {
       action: saved ? 'unsave' : 'save',
     }).then((res) => {
+      if (token !== api.getToken() || !this.data.script) return;
       if (res.code !== 0) {
         wx.showToast({ title: res.message || '操作失败', icon: 'none' });
         return;
@@ -80,7 +97,9 @@ Page({
 
   dismiss() {
     if (!this.requireLogin()) return;
+    const token = api.getToken();
     api.post('/api/scripts/' + this.data.scriptId + '/action', { action: 'dismiss' }).then((res) => {
+      if (token !== api.getToken()) return;
       if (res.code !== 0) {
         wx.showToast({ title: res.message || '操作失败', icon: 'none' });
         return;
@@ -92,14 +111,21 @@ Page({
 
   explain() {
     if (!this.requireLogin() || this.data.explanationLoading) return;
+    const token = api.getToken();
+    const version = this.loadVersion;
     this.setData({ explanationLoading: true });
-    api.post('/api/ai/script-explanation', { scriptId: this.data.scriptId }).then((res) => {
+    return api.post('/api/ai/script-explanation', { scriptId: this.data.scriptId }).then((res) => {
+      if (token !== api.getToken() || version !== this.loadVersion) return;
       this.setData({ explanationLoading: false });
       if (res.code !== 0 || !res.data || !res.data.explanation) {
         wx.showToast({ title: res.message || '暂时无法生成说明', icon: 'none' });
         return;
       }
       this.setData({ explanation: res.data.explanation, explanationReady: true });
+    }).catch(() => {
+      if (token !== api.getToken() || version !== this.loadVersion) return;
+      this.setData({ explanationLoading: false });
+      wx.showToast({ title: '说明生成失败，请重试', icon: 'none' });
     });
   },
 

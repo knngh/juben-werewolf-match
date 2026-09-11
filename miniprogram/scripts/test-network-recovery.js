@@ -47,6 +47,46 @@ function healthy(pathname) {
   return Promise.resolve({ code: 0, data: [] });
 }
 
+test('scripts: cancelling a saved item refreshes the saved collection', async () => {
+  const { page, api } = loadPage('scripts', healthy);
+  await page.load();
+  page.setData({ 'filters.collection': 'saved', scripts: [{ ...script, saved: true }] });
+  api.post = async () => ({ code: 0 });
+  api.get = (url) => url === '/api/scripts' ? Promise.resolve({ code: 0, data: [], pagination: { total: 0, hasMore: false } }) : healthy(url);
+  await page.toggleSave({ currentTarget: { dataset: { id: 1, saved: true } } });
+  assert.equal(page.data.scripts.length, 0);
+  assert.equal(page.data.savedCount, 0);
+});
+
+test('scripts: an old account save response cannot change the new account collection', async () => {
+  const { page, api, storage } = loadPage('scripts', healthy);
+  await page.load();
+  let resolve;
+  api.post = () => new Promise((done) => { resolve = done; });
+  const saving = page.toggleSave({ currentTarget: { dataset: { id: 1, saved: true } } });
+  storage.jwm_token = 'new-owner';
+  await page.load();
+  page.setData({ scripts: [{ ...script, saved: true }] });
+  resolve({ code: 0 });
+  await saving;
+  assert.equal(page.data.scripts[0].saved, true);
+});
+
+test('detail: switching accounts discards an older private AI explanation', async () => {
+  const { page, api, storage } = loadPage('script-detail', async () => ({ code: 0, data: script }));
+  let resolve;
+  api.post = (url) => url.startsWith('/api/ai/') ? new Promise((done) => { resolve = done; }) : Promise.resolve({ code: 0 });
+  page.setData({ scriptId: 1 });
+  await page.load(1);
+  const explaining = page.explain();
+  storage.jwm_token = 'new-owner';
+  await page.onShow();
+  resolve({ code: 0, data: { explanation: 'Private taste of the previous user' } });
+  await explaining;
+  assert.equal(page.data.explanation, '');
+  assert.equal(page.data.explanationLoading, false);
+});
+
 for (const name of ['scripts', 'tools', 'archive']) {
   test(name + ': connection failure has a persistent error; retry restores data', async () => {
     const { page, api } = loadPage(name, () => Promise.resolve(unavailable));

@@ -46,6 +46,7 @@ Page({
     hasMore: false,
     nextOffset: 0,
     loadingMore: false,
+    actionPending: false,
     scripts: [],
     filters: {
       q: '',
@@ -97,7 +98,9 @@ Page({
     const loggedIn = !!token;
     if (this.ownerToken !== token) {
       this.ownerToken = token;
-      this.setData({ scripts: [], tasteCompleted: false, hasMore: false, nextOffset: 0, savedCount: 0, highMatchCount: 0 });
+      this.setData({ scripts: [], tasteCompleted: false, hasMore: false, nextOffset: 0, savedCount: 0, highMatchCount: 0,
+        resultCountText: '--', actionPending: false, 'filters.collection': '' });
+      this.refreshFilterRows();
     }
     this.setData({ loggedIn, loading: !append, loadingMore: append });
     const tastePromise = loggedIn
@@ -188,39 +191,35 @@ Page({
   toggleSave(event) {
     const id = Number(event.currentTarget.dataset.id);
     const saved = event.currentTarget.dataset.saved === true || event.currentTarget.dataset.saved === 'true';
-    if (!api.getToken()) {
-      wx.navigateTo({ url: navigation.loginUrlWithRedirect() });
-      return;
-    }
-    api.post('/api/scripts/' + id + '/action', { action: saved ? 'unsave' : 'save' }).then((res) => {
-      if (res.code !== 0) {
-        wx.showToast({ title: res.message || '操作失败', icon: 'none' });
-        return;
-      }
-      this.setData({
-        scripts: this.data.scripts.map((item) => item.id === id
-          ? Object.assign({}, item, { saved: !saved })
-          : item),
-        savedCount: Math.max(0, this.data.savedCount + (saved ? -1 : 1)),
-      });
-      wx.showToast({ title: saved ? '已取消收藏' : '已收藏', icon: 'success' });
-    });
+    return this.updateAction(id, saved ? 'unsave' : 'save', saved ? '已取消收藏' : '已收藏');
   },
 
   dismiss(event) {
     const id = Number(event.currentTarget.dataset.id);
     const dismissed = event.currentTarget.dataset.dismissed === true || event.currentTarget.dataset.dismissed === 'true';
-    if (!api.getToken()) {
+    return this.updateAction(id, dismissed ? 'restore' : 'dismiss', dismissed ? '已恢复推荐' : '已跳过这本');
+  },
+
+  updateAction(id, action, message) {
+    const token = api.getToken();
+    if (!token) {
       wx.navigateTo({ url: navigation.loginUrlWithRedirect() });
       return;
     }
-    api.post('/api/scripts/' + id + '/action', { action: dismissed ? 'restore' : 'dismiss' }).then((res) => {
+    if (this.data.actionPending || token !== this.ownerToken) return;
+    this.setData({ actionPending: true });
+    return api.post('/api/scripts/' + id + '/action', { action }).then((res) => {
+      if (token !== api.getToken()) return;
       if (res.code !== 0) {
         wx.showToast({ title: res.message || '操作失败', icon: 'none' });
         return;
       }
-      this.load();
-      wx.showToast({ title: dismissed ? '已恢复推荐' : '已跳过这本', icon: 'none' });
+      wx.showToast({ title: message, icon: 'none' });
+      return this.load();
+    }).catch(() => {
+      if (token === api.getToken()) wx.showToast({ title: '操作失败，请重试', icon: 'none' });
+    }).then(() => {
+      if (token === api.getToken()) this.setData({ actionPending: false });
     });
   },
 
