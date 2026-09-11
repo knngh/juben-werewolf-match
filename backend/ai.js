@@ -383,6 +383,7 @@ function scriptPublicContext(script = {}) {
 function normalizeUserNotes(notes = []) {
   if (!Array.isArray(notes)) return [];
   return notes.slice(0, 12).map((note) => ({
+    id: Number(note && (note.id || note.noteId)) || null,
     category: normalizeText(note && note.category, 20),
     title: normalizeText(note && note.title, 60),
     content: normalizeText(note && note.content, 300),
@@ -478,6 +479,33 @@ function normalizeAiPlayRecap(recap = {}, script = {}, record = {}, notes = []) 
     summary: normalizeAiTextOutput(recap.summary, 220, fallback.summary),
     highlights: normalizeAiList(recap.highlights, 5, 120).length ? normalizeAiList(recap.highlights, 5, 120) : fallback.highlights,
     nextTime: normalizeAiList(recap.nextTime, 4).length ? normalizeAiList(recap.nextTime, 4) : fallback.nextTime,
+  };
+}
+
+function buildMockEvidenceCoach(notes = [], question = '') {
+  const normalized = normalizeUserNotes(notes);
+  const sources = normalized.map((note) => ({
+    noteId: Number(note.id),
+    reason: `引用“${note.title || note.category || '这条笔记'}”作为核查起点`,
+  })).filter((item) => Number.isInteger(item.noteId));
+  return {
+    summary: question ? `围绕“${normalizeText(question, 80)}”，先核对你已经记录的证据。` : '先把已记录的线索逐条核对，再决定下一步。',
+    steps: ['确认笔记描述的是事实还是推断', '为每条线索补上发生时间或来源', '只验证一个最可能改变判断的假设'],
+    sources,
+    unknowns: ['当前笔记没有提供完整上下文', '没有来源的推断暂时不能当作结论'],
+  };
+}
+
+function normalizeAiEvidenceCoach(coach = {}, notes = [], question = '') {
+  const fallback = buildMockEvidenceCoach(notes, question);
+  const sources = Array.isArray(coach.sources) ? coach.sources.map((source) => ({
+    noteId: Number(source && source.noteId), reason: normalizeText(source && source.reason, 120),
+  })).filter((source) => Number.isInteger(source.noteId) && source.reason).slice(0, 5) : [];
+  return {
+    summary: normalizeAiTextOutput(coach.summary, 220, fallback.summary),
+    steps: normalizeAiList(coach.steps, 4).length ? normalizeAiList(coach.steps, 4) : fallback.steps,
+    sources: sources.length ? sources : fallback.sources,
+    unknowns: normalizeAiList(coach.unknowns, 4).length ? normalizeAiList(coach.unknowns, 4) : fallback.unknowns,
   };
 }
 
@@ -698,6 +726,15 @@ function buildPlayRecapSchema() {
     highlights: { type: 'array', items: textSchema(120), maxItems: 5 },
     nextTime: { type: 'array', items: textSchema(80), maxItems: 4 },
   }, ['summary', 'highlights', 'nextTime']);
+}
+
+function buildEvidenceCoachSchema() {
+  return buildJsonSchema('evidence_coach', {
+    summary: textSchema(220),
+    steps: { type: 'array', items: textSchema(100), maxItems: 4 },
+    sources: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { noteId: { type: 'integer', minimum: 1 }, reason: textSchema(120) }, required: ['noteId', 'reason'] }, maxItems: 5 },
+    unknowns: { type: 'array', items: textSchema(100), maxItems: 4 },
+  }, ['summary', 'steps', 'sources', 'unknowns']);
 }
 
 function buildTextObjectSchema(name, field, maxLength) {
@@ -1095,6 +1132,21 @@ async function generatePlayRecap(config, script = {}, record = {}, notes = []) {
   return createAiResult(normalizeAiPlayRecap(result.data, script, normalizedRecord, normalizedNotes), result.meta);
 }
 
+async function generateEvidenceCoach(config, script = {}, question = '', notes = []) {
+  const normalizedQuestion = normalizeText(question, 300);
+  const normalizedNotes = normalizeUserNotes(notes);
+  if (config.provider === 'mock') return createAiResult(normalizeAiEvidenceCoach(buildMockEvidenceCoach(normalizedNotes, normalizedQuestion), normalizedNotes, normalizedQuestion));
+  const result = await callChatCompletionsJson(config, [
+    { role: 'system', content: buildSystemPrompt() },
+    { role: 'user', content: JSON.stringify({
+      task: '只根据用户提供的笔记，给出可验证的核查步骤。每个来源必须引用输入中的 noteId，不补写剧本真相。',
+      script: scriptPublicContext(script), question: normalizedQuestion,
+      notes: normalizedNotes.map((note) => ({ noteId: note.id, category: note.category, title: note.title, content: note.content })),
+    }) },
+  ], buildEvidenceCoachSchema());
+  return createAiResult(normalizeAiEvidenceCoach(result.data, normalizedNotes, normalizedQuestion), result.meta);
+}
+
 function buildMockScriptExplanation(profile = {}, script = {}, reasons = []) {
   const reasonText = normalizeTags(reasons).slice(0, 3).join('、');
   const title = normalizeText(script.title, 40) || '这本剧本';
@@ -1189,6 +1241,7 @@ module.exports = {
   generatePlayPrep,
   generateStuckCoach,
   generatePlayRecap,
+  generateEvidenceCoach,
   buildMockScriptExplanation,
   generateScriptExplanation,
   classifyReport,

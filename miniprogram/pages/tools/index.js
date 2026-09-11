@@ -38,9 +38,10 @@ function confirmAction(title, content) {
 
 function freshWorkspace() {
   return {
-    activeTab: 'timer', aiLoading: false, aiPrep: null, aiCoach: null, aiRecap: null, coachQuestion: '',
-    notes: [], noteCategory: NOTE_CATEGORIES[0], noteForm: { title: '', content: '' },
-    recordForm: { role: '', rating: 0, note: '', playedAt: today() },
+    playSessionId: 0,
+    activeTab: 'timer', aiLoading: false, aiPrep: null, aiCoach: null, aiRecap: null, aiEvidence: null, coachQuestion: '',
+    notes: [], evidenceNoteIds: [], noteCategory: NOTE_CATEGORIES[0], noteForm: { title: '', content: '' },
+    recordForm: { role: '', rating: 0, note: '', playedAt: today(), contentRating: 0, roleRating: 0, dmRating: 0, tableRating: 0, feedbackConfirmed: false },
     savingNote: false, savingRecord: false,
     editingNoteId: 0, editingRecordId: 0, deletingNoteId: 0,
     noteSubmission: null, recordSubmission: null,
@@ -67,6 +68,12 @@ Page({
     noteCategories: NOTE_CATEGORIES,
     records: [],
     ratingOptions: [1, 2, 3, 4, 5],
+    feedbackOptions: [
+      { field: 'contentRating', label: '剧本内容' },
+      { field: 'roleRating', label: '角色体验' },
+      { field: 'dmRating', label: '主持带本' },
+      { field: 'tableRating', label: '同桌氛围' },
+    ],
   },
 
   onLoad(query) {
@@ -145,6 +152,7 @@ Page({
       timerSeconds: this.data.timerSeconds, timerRunning: this.data.timerRunning, timerDeadline: this.data.timerDeadline,
       noteForm: this.data.noteForm, noteCategory: this.data.noteCategory,
       recordForm: this.data.recordForm, coachQuestion: this.data.coachQuestion,
+      playSessionId: this.data.playSessionId,
       editingNoteId: this.data.editingNoteId, editingRecordId: this.data.editingRecordId,
       noteSubmission: this.data.noteSubmission, recordSubmission: this.data.recordSubmission,
     }));
@@ -192,17 +200,34 @@ Page({
       noteForm: { title: text(note.title, 80), content: text(note.content, 1000) },
       noteCategory: NOTE_CATEGORIES.includes(saved.noteCategory) ? saved.noteCategory : NOTE_CATEGORIES[0],
       recordForm: { role: text(record.role, 80), rating: Math.max(0, Math.min(5, Math.floor(Number(record.rating) || 0))),
-        note: text(record.note, 500), playedAt: /^\d{4}-\d{2}-\d{2}$/.test(record.playedAt || '') ? record.playedAt : today() },
+        note: text(record.note, 500), playedAt: /^\d{4}-\d{2}-\d{2}$/.test(record.playedAt || '') ? record.playedAt : today(),
+        contentRating: Math.max(0, Math.min(5, Math.floor(Number(record.contentRating) || 0))), roleRating: Math.max(0, Math.min(5, Math.floor(Number(record.roleRating) || 0))),
+        dmRating: Math.max(0, Math.min(5, Math.floor(Number(record.dmRating) || 0))), tableRating: Math.max(0, Math.min(5, Math.floor(Number(record.tableRating) || 0))), feedbackConfirmed: record.feedbackConfirmed === true },
       coachQuestion: text(saved.coachQuestion, 300),
       editingNoteId: Number.isSafeInteger(saved.editingNoteId) && saved.editingNoteId > 0 ? saved.editingNoteId : 0,
       editingRecordId: Number.isSafeInteger(saved.editingRecordId) && saved.editingRecordId > 0 ? saved.editingRecordId : 0,
       noteSubmission: saved.noteSubmission || null, recordSubmission: saved.recordSubmission || null,
+      playSessionId: Number(saved.playSessionId) || 0,
     });
     this.resumeClock();
   },
 
   currentContext() {
     return { version: this.contextVersion, token: api.getToken(), scriptId: this.data.scriptId };
+  },
+
+  ensurePlaySession() {
+    if (this.data.playSessionId) return Promise.resolve(this.data.playSessionId);
+    if (!this.data.scriptId || !api.getToken()) return Promise.reject(new Error('missing play session context'));
+    if (this.playSessionPromise) return this.playSessionPromise;
+    const context = this.currentContext();
+    this.playSessionPromise = api.post('/api/play-sessions', { scriptId: this.data.scriptId }).then((res) => {
+      if (!this.isCurrent(context) || res.code !== 0 || !res.data || !res.data.id) throw new Error(res.message || '游玩批次创建失败');
+      this.setData({ playSessionId: Number(res.data.id) });
+      this.persistWorkspace();
+      return Number(res.data.id);
+    }).finally(() => { this.playSessionPromise = null; });
+    return this.playSessionPromise;
   },
 
   isCurrent(context) {
@@ -321,7 +346,7 @@ Page({
       if (!this.isCurrent(context) || version !== this.notesVersion) return;
       if (res.code === 0 && Array.isArray(res.data)) {
         const notes = append ? this.data.notes.concat(res.data.filter((item) => !this.data.notes.some((old) => old.id === item.id))) : res.data;
-        this.setData({ notes, hasMoreNotes: !!(res.pagination && res.pagination.hasMore), nextNoteOffset: res.pagination && res.pagination.nextOffset || 0 });
+        this.setData({ notes: notes.map((item) => Object.assign({}, item, { evidenceSelected: this.data.evidenceNoteIds.includes(item.id) })), hasMoreNotes: !!(res.pagination && res.pagination.hasMore), nextNoteOffset: res.pagination && res.pagination.nextOffset || 0 });
       }
       else this.setData({ loadError: res.message || '笔记暂未更新', loadErrorHint: res.hint || '' });
     }).catch(() => {
@@ -343,6 +368,16 @@ Page({
     this.persistWorkspace();
   },
 
+  toggleEvidenceNote(event) {
+    const id = Number(event.currentTarget.dataset.id);
+    const ids = this.data.evidenceNoteIds.slice();
+    const index = ids.indexOf(id);
+    if (index >= 0) ids.splice(index, 1);
+    else if (ids.length < 5) ids.push(id);
+    else return wx.showToast({ title: '最多选择 5 条笔记', icon: 'none' });
+    this.setData({ evidenceNoteIds: ids, notes: this.data.notes.map((item) => Object.assign({}, item, { evidenceSelected: ids.includes(item.id) })) });
+  },
+
   runAiRequest(endpoint, payload, field, successTitle) {
     if (this.data.aiLoading) return;
     if (!this.data.scriptId) {
@@ -358,7 +393,8 @@ Page({
         wx.showToast({ title: res.message || 'AI 暂时不可用', icon: 'none' });
         return;
       }
-      this.setData({ [field]: res.data && res.data[field.replace('ai', '').toLowerCase()] || res.data });
+      const responseKey = { aiPrep: 'prep', aiCoach: 'coach', aiRecap: 'recap', aiEvidence: 'coach' }[field];
+      this.setData({ [field]: res.data && responseKey && res.data[responseKey] || res.data });
       if (successTitle) wx.showToast({ title: successTitle, icon: 'success' });
     }).catch(() => {
       if (!this.isCurrent(context)) return;
@@ -385,6 +421,11 @@ Page({
       rating: this.data.recordForm.rating,
       note: this.data.recordForm.note,
     }, 'aiRecap', '复盘摘要已生成');
+  },
+
+  generateEvidenceCoach() {
+    if (!this.data.evidenceNoteIds.length) return wx.showToast({ title: '先选择要核查的笔记', icon: 'none' });
+    this.runAiRequest('/api/ai/evidence-coach', { scriptId: this.data.scriptId, sessionId: this.data.playSessionId || undefined, noteIds: this.data.evidenceNoteIds, question: this.data.coachQuestion }, 'aiEvidence', '证据提示已生成');
   },
 
   selectSegment(event) {
@@ -506,7 +547,7 @@ Page({
     if ((this.data.noteForm.title || this.data.noteForm.content) &&
         !await confirmAction('编辑这条笔记？', '当前编辑框里的草稿将被替换。')) return;
     if (!this.isCurrent(context) || this.data.savingNote) return;
-    this.setData({ editingNoteId: note.id, noteSubmission: null, noteCategory: note.category,
+    this.setData({ editingNoteId: note.id, noteSubmission: null, playSessionId: Number(note.sessionId) || this.data.playSessionId || 0, noteCategory: note.category,
       noteForm: { title: note.title || '', content: note.content }, activeTab: 'notes' });
     this.persistWorkspace();
     if (wx.pageScrollTo) wx.pageScrollTo({ scrollTop: 0, duration: 200 });
@@ -545,13 +586,18 @@ Page({
       return;
     }
     const context = this.currentContext();
-    const payload = { category: this.data.noteCategory, title: this.data.noteForm.title, content: this.data.noteForm.content };
-    const draft = JSON.stringify(payload);
+    const submissionPayload = { category: this.data.noteCategory, title: this.data.noteForm.title, content: this.data.noteForm.content };
+    const payload = Object.assign({}, submissionPayload, { sessionId: this.data.playSessionId || undefined });
+    const draft = JSON.stringify(submissionPayload);
     const editingId = this.data.editingNoteId;
     const url = '/api/scripts/' + this.data.scriptId + '/notes';
-    if (!editingId) payload.clientRequestId = this.submissionId('note', payload);
+    if (!editingId) payload.clientRequestId = this.submissionId('note', submissionPayload);
     this.setData({ savingNote: true });
-    return (editingId ? api.patch(url + '/' + editingId, payload) : api.post(url, payload)).then((res) => {
+    const sessionReady = editingId ? Promise.resolve(this.data.playSessionId || 0) : this.ensurePlaySession();
+    return sessionReady.then((sessionId) => {
+      payload.sessionId = sessionId;
+      return editingId ? api.patch(url + '/' + editingId, payload) : api.post(url, payload);
+    }).then((res) => {
       if (!this.isCurrent(context)) return;
       this.setData({ savingNote: false });
       if (res.code !== 0) {
@@ -571,6 +617,17 @@ Page({
 
   selectRating(event) {
     this.setData({ 'recordForm.rating': Number(event.currentTarget.dataset.rating) });
+    this.persistWorkspace();
+  },
+
+  selectFeedbackRating(event) {
+    const field = event.currentTarget.dataset.field;
+    this.setData({ ['recordForm.' + field]: Number(event.currentTarget.dataset.rating) });
+    this.persistWorkspace();
+  },
+
+  toggleFeedbackConfirmed() {
+    this.setData({ 'recordForm.feedbackConfirmed': !this.data.recordForm.feedbackConfirmed });
     this.persistWorkspace();
   },
 
@@ -595,7 +652,9 @@ Page({
     if (!this.isCurrent(context) || this.data.savingRecord) return;
     const record = res.data;
     this.setData({ editingRecordId: record.id, recordSubmission: null, activeTab: 'record',
-      recordForm: { role: record.role || '', rating: record.rating || 0, note: record.note || '', playedAt: record.playedAt } });
+      recordForm: { role: record.role || '', rating: record.rating || 0, note: record.note || '', playedAt: record.playedAt,
+        contentRating: record.contentRating || 0, roleRating: record.roleRating || 0, dmRating: record.dmRating || 0,
+        tableRating: record.tableRating || 0, feedbackConfirmed: record.feedbackConfirmed === true }, playSessionId: record.sessionId || this.data.playSessionId || 0 });
     this.persistWorkspace();
   },
 
@@ -617,7 +676,11 @@ Page({
     const payload = Object.assign({}, this.data.recordForm, { scriptId: this.data.scriptId });
     if (!editingId) payload.clientRequestId = this.submissionId('record', payload);
     this.setData({ savingRecord: true });
-    return (editingId ? api.patch('/api/play-records/' + editingId, payload) : api.post('/api/play-records', payload)).then((res) => {
+    const sessionReady = editingId ? Promise.resolve(this.data.playSessionId || 0) : this.ensurePlaySession();
+    return sessionReady.then((sessionId) => {
+      payload.sessionId = sessionId;
+      return editingId ? api.patch('/api/play-records/' + editingId, payload) : api.post('/api/play-records', payload);
+    }).then((res) => {
       if (!this.isCurrent(context)) return;
       this.setData({ savingRecord: false });
       if (res.code !== 0) {

@@ -123,6 +123,19 @@ function serializeTasteProfile(value) {
   }
 }
 
+function serializeSelectionContext(value) {
+  try {
+    const parsed = JSON.parse(value || '{}');
+    return {
+      maxDuration: Number.isInteger(parsed.maxDuration) && parsed.maxDuration > 0 ? parsed.maxDuration : null,
+      players: Number.isInteger(parsed.players) && parsed.players > 0 ? parsed.players : null,
+      difficulty: ['入门', '进阶'].includes(parsed.difficulty) ? parsed.difficulty : '',
+    };
+  } catch {
+    return { maxDuration: null, players: null, difficulty: '' };
+  }
+}
+
 function serializeScript(row, state = {}) {
   return {
     id: row.id,
@@ -137,6 +150,12 @@ function serializeScript(row, state = {}) {
     highlights: parseJsonArray(row.highlights),
     warnings: parseJsonArray(row.warnings),
     riskTags: bookRecommendation.riskTags(row),
+    contentStatus: row.content_status || 'unverified',
+    sourceName: row.source_name || '',
+    sourceUrl: row.source_url || '',
+    sourceVersion: row.source_version || '',
+    sourceCheckedAt: row.source_checked_at || '',
+    conflicts: state.conflicts || [],
     description: row.description || '',
     matchScore: state.matchScore,
     matchReasons: state.reasons || [],
@@ -179,7 +198,8 @@ function getRecommendationContext(userId) {
     if (field) state[field] = true;
     states.set(item.script_id, state);
   });
-  const records = db.prepare(`SELECT r.script_id, s.tags, AVG(r.rating) AS rating
+  const records = db.prepare(`SELECT r.script_id, s.tags,
+    AVG(CASE WHEN r.feedback_confirmed = 1 AND r.content_rating IS NOT NULL THEN r.content_rating ELSE r.rating END) AS rating
     FROM play_records r JOIN scripts s ON s.id = r.script_id WHERE r.user_id = ? GROUP BY r.script_id`).all(userId);
   records.forEach((item) => states.set(item.script_id, { ...states.get(item.script_id), played: true }));
   return { states, tagPreferences: bookRecommendation.buildFeedbackPreferences(records) };
@@ -194,6 +214,8 @@ app.get('/api/scripts', [
   query('limit').optional().isInt({ min: 1, max: 100 }),
   query('offset').optional().isInt({ min: 0, max: 100000 }),
   query('collection').optional({ checkFalsy: true }).isIn(['saved', 'dismissed']),
+  query('maxDuration').optional().isInt({ min: 1, max: 600 }),
+  query('players').optional().isInt({ min: 1, max: 30 }),
 ], (req, res) => {
   if (!requireValidation(req, res)) return;
   const catalog = req.query.catalog === '1';
@@ -204,6 +226,9 @@ app.get('/api/scripts', [
     difficulty: normalizeText(req.query.difficulty, 20),
     q: normalizeText(req.query.q, 40),
   });
+  const maxDuration = req.query.maxDuration ? Number(req.query.maxDuration) : null;
+  const players = req.query.players ? Number(req.query.players) : null;
+  const occasionDifficulty = normalizeText(req.query.occasionDifficulty || req.query.difficulty || '', 20);
   const userId = req.userId || null;
   const profileRow = userId ? db.prepare('SELECT taste_profile FROM profiles WHERE user_id = ?').get(userId) : null;
   const tasteProfile = serializeTasteProfile(profileRow && profileRow.taste_profile);
@@ -217,12 +242,59 @@ app.get('/api/scripts', [
       matchReasons: match.reasons,
       _score: match.score,
     };
-  }).filter((item) => req.query.collection === 'dismissed' ? item.dismissed
-    : req.query.collection === 'saved' ? item.saved : catalog || !item.dismissed);
+  }).filter((item) => (maxDuration === null || item.durationMin <= maxDuration) &&
+    (players === null || (item.minPlayers <= players && item.maxPlayers >= players)) &&
+    (!occasionDifficulty || item.difficulty === occasionDifficulty) &&
+    (req.query.collection === 'dismissed' ? item.dismissed
+    : req.query.collection === 'saved' ? item.saved : catalog || !item.dismissed));
   if (!catalog) scripts.sort((left, right) => right._score - left._score || left.id - right.id);
   res.json({ code: 0, data: scripts.slice(offset, offset + limit).map(({ _score, ...item }) => item),
     pagination: { offset, limit, total: scripts.length, hasMore: offset + limit < scripts.length,
       nextOffset: offset + limit < scripts.length ? offset + limit : null } });
+});
+
+app.get('/api/selection-context', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT selection_context FROM profiles WHERE user_id = ?').get(req.userId) || {};
+  res.json({ code: 0, data: serializeSelectionContext(row.selection_context) });
+});
+
+app.post('/api/selection-context', requireAuth, [
+  body('maxDuration').optional({ nullable: true }).isInt({ min: 30, max: 600 }),
+  body('players').optional({ nullable: true }).isInt({ min: 1, max: 30 }),
+  body('difficulty').optional().isIn(['', '入门', '进阶']),
+], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const context = {
+    maxDuration: req.body.maxDuration === null || req.body.maxDuration === undefined ? null : Number(req.body.maxDuration),
+    players: req.body.players === null || req.body.players === undefined ? null : Number(req.body.players),
+    difficulty: req.body.difficulty || '',
+  };
+  db.prepare("UPDATE profiles SET selection_context = ?, updated_at = datetime('now') WHERE user_id = ?")
+    .run(JSON.stringify(context), req.userId);
+  res.json({ code: 0, data: context, message: '本次选本条件已保存' });
+});
+
+app.get('/api/scripts/compare', requireAuth, (req, res) => {
+  const rawIds = String(req.query.ids || '').split(',').filter(Boolean).map(Number);
+  if (!rawIds.length || rawIds.length > 3 || rawIds.some((id) => !Number.isInteger(id) || id < 1) || new Set(rawIds).size !== rawIds.length) {
+    return res.status(400).json({ code: 400, message: '请选择 1-3 本剧本进行对比' });
+  }
+  const profileRow = db.prepare('SELECT taste_profile, selection_context FROM profiles WHERE user_id = ?').get(req.userId) || {};
+  const tasteProfile = serializeTasteProfile(profileRow.taste_profile);
+  const context = getRecommendationContext(req.userId);
+  const occasion = serializeSelectionContext(profileRow.selection_context);
+  const rows = rawIds.map((id) => db.prepare('SELECT * FROM scripts WHERE id = ?').get(id));
+  if (rows.some((row) => !row)) return res.status(404).json({ code: 404, message: '剧本不存在' });
+  const data = rows.map((row) => {
+    const state = getScriptState(req.userId, row.id, context);
+    const match = bookRecommendation.scoreBook(row, tasteProfile, state);
+    const conflicts = [];
+    if (occasion.maxDuration && row.duration_min > occasion.maxDuration) conflicts.push('超过本次最长时长');
+    if (occasion.players && !(row.min_players <= occasion.players && row.max_players >= occasion.players)) conflicts.push('人数不在本次范围');
+    if (occasion.difficulty && row.difficulty !== occasion.difficulty) conflicts.push('难度不符合本次条件');
+    return serializeScript(row, { ...state, matchScore: match.matchScore, reasons: match.reasons, conflicts });
+  });
+  res.json({ code: 0, data });
 });
 
 app.get('/api/scripts/:id', (req, res) => {
@@ -296,6 +368,12 @@ function serializePlayRecord(row = {}) {
     gameType: row.game_type || '',
     role: row.role || '',
     rating: row.rating === null || row.rating === undefined ? null : Number(row.rating),
+    contentRating: row.content_rating === null || row.content_rating === undefined ? null : Number(row.content_rating),
+    roleRating: row.role_rating === null || row.role_rating === undefined ? null : Number(row.role_rating),
+    dmRating: row.dm_rating === null || row.dm_rating === undefined ? null : Number(row.dm_rating),
+    tableRating: row.table_rating === null || row.table_rating === undefined ? null : Number(row.table_rating),
+    feedbackConfirmed: !!row.feedback_confirmed,
+    sessionId: row.session_id || null,
     note: row.note || '',
     playedAt: row.played_at || '',
     createdAt: row.created_at || '',
@@ -372,6 +450,9 @@ function recordValidation() {
     body('rating').optional({ nullable: true }).isInt({ min: 1, max: 5 }).withMessage('评分应为 1-5 分'),
     body('note').optional().isString().bail().trim().isLength({ max: 500 }).withMessage('短评最多 500 字'),
     body('playedAt').optional().isString().bail().matches(/^\d{4}-\d{2}-\d{2}$/).bail().isISO8601({ strict: true }).withMessage('打本日期格式无效'),
+    body('sessionId').optional({ nullable: true }).isInt({ min: 1 }),
+    ...['contentRating', 'roleRating', 'dmRating', 'tableRating'].map((field) => body(field).optional({ nullable: true }).isInt({ min: 1, max: 5 })),
+    body('feedbackConfirmed').optional().isBoolean(),
   ];
 }
 
@@ -405,15 +486,47 @@ app.post('/api/play-records', requireAuth, [
   if (!db.prepare('SELECT id FROM scripts WHERE id = ?').get(scriptId)) {
     return res.status(404).json({ code: 404, message: '剧本不存在' });
   }
-  const payload = { scriptId, role: normalizeText(req.body.role, 80), rating: req.body.rating ? Number(req.body.rating) : null,
-    note: normalizeText(req.body.note, 500), playedAt: req.body.playedAt || null };
+  const sessionId = req.body.sessionId ? Number(req.body.sessionId) : null;
+  if (sessionId && !db.prepare('SELECT id FROM play_sessions WHERE id = ? AND user_id = ? AND script_id = ?').get(sessionId, req.userId, scriptId)) {
+    return res.status(400).json({ code: 400, message: '游玩批次不存在' });
+  }
+  const feedbackConfirmed = req.body.feedbackConfirmed === true || req.body.feedbackConfirmed === 'true' ? 1 : 0;
+  const payload = { scriptId, sessionId, role: normalizeText(req.body.role, 80), rating: req.body.rating ? Number(req.body.rating) : null,
+    contentRating: req.body.contentRating ? Number(req.body.contentRating) : null,
+    roleRating: req.body.roleRating ? Number(req.body.roleRating) : null,
+    dmRating: req.body.dmRating ? Number(req.body.dmRating) : null,
+    tableRating: req.body.tableRating ? Number(req.body.tableRating) : null,
+    feedbackConfirmed, note: normalizeText(req.body.note, 500), playedAt: req.body.playedAt || null };
   const id = createPersonalResource(req, res, 'record', payload, () => db.prepare(`
-    INSERT INTO play_records (user_id, script_id, role, rating, note, played_at) VALUES (?, ?, ?, ?, ?, ?)
-  `).run(req.userId, scriptId, payload.role, payload.rating, payload.note, payload.playedAt || new Date().toISOString().slice(0, 10)).lastInsertRowid,
+    INSERT INTO play_records (user_id, script_id, role, rating, note, played_at, session_id, content_rating, role_rating, dm_rating, table_rating, feedback_confirmed)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(req.userId, scriptId, payload.role, payload.rating, payload.note, payload.playedAt || new Date().toISOString().slice(0, 10), payload.sessionId,
+    payload.contentRating, payload.roleRating, payload.dmRating, payload.tableRating, payload.feedbackConfirmed).lastInsertRowid,
   (recordId) => getPersonalRecord(recordId, req.userId));
   if (!id) return;
   const row = getPersonalRecord(id, req.userId);
   res.json({ code: 0, data: { record: serializePlayRecord(row), summary: getPlayRecordSummary(req.userId) }, message: '打本记录已保存' });
+});
+
+app.get('/api/play-sessions', requireAuth, (req, res) => {
+  const rows = db.prepare(`SELECT ps.*, s.title AS script_title FROM play_sessions ps JOIN scripts s ON s.id = ps.script_id WHERE ps.user_id = ? ORDER BY ps.id DESC LIMIT 100`).all(req.userId);
+  res.json({ code: 0, data: rows.map((row) => ({ id: row.id, scriptId: row.script_id, scriptTitle: row.script_title, status: row.status, startedAt: row.started_at, endedAt: row.ended_at })) });
+});
+
+app.post('/api/play-sessions', requireAuth, [body('scriptId').isInt({ min: 1 })], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const scriptId = Number(req.body.scriptId);
+  if (!db.prepare('SELECT id FROM scripts WHERE id = ?').get(scriptId)) return res.status(404).json({ code: 404, message: '剧本不存在' });
+  const result = db.prepare('INSERT INTO play_sessions (user_id, script_id) VALUES (?, ?)').run(req.userId, scriptId);
+  res.json({ code: 0, data: { id: Number(result.lastInsertRowid), scriptId, status: 'active' }, message: '游玩批次已开始' });
+});
+
+app.patch('/api/play-sessions/:id', requireAuth, [resourceIdValidation('id'), body('status').isIn(['active', 'completed', 'abandoned'])], (req, res) => {
+  if (!requireValidation(req, res)) return;
+  const id = Number(req.params.id);
+  const result = db.prepare("UPDATE play_sessions SET status = ?, ended_at = CASE WHEN ? = 'completed' THEN datetime('now') ELSE ended_at END, updated_at = datetime('now') WHERE id = ? AND user_id = ?").run(req.body.status, req.body.status, id, req.userId);
+  if (!result.changes) return res.status(404).json({ code: 404, message: '游玩批次不存在' });
+  res.json({ code: 0, data: { id, status: req.body.status }, message: '游玩批次已更新' });
 });
 
 app.get('/api/play-records/:id', requireAuth, resourceIdValidation('id'), (req, res) => {
@@ -429,8 +542,15 @@ app.patch('/api/play-records/:id', requireAuth, [resourceIdValidation('id'), ...
   if (!row) return res.status(404).json({ code: 404, message: '记录不存在' });
   if (req.body.scriptId !== undefined && Number(req.body.scriptId) !== row.script_id) return res.status(400).json({ code: 400, message: '不能更换记录所属剧本' });
   const value = (key, fallback) => req.body[key] === undefined ? fallback : req.body[key];
-  db.prepare(`UPDATE play_records SET role = ?, rating = ?, note = ?, played_at = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`)
-    .run(value('role', row.role), value('rating', row.rating), value('note', row.note), value('playedAt', row.played_at), row.id, req.userId);
+  const nextSessionId = req.body.sessionId === undefined ? row.session_id : (req.body.sessionId ? Number(req.body.sessionId) : null);
+  if (nextSessionId && !db.prepare('SELECT id FROM play_sessions WHERE id = ? AND user_id = ? AND script_id = ?').get(nextSessionId, req.userId, row.script_id)) {
+    return res.status(400).json({ code: 400, message: '游玩批次不存在' });
+  }
+  const nullableRating = (key, fallback) => req.body[key] === undefined ? fallback : (req.body[key] === null ? null : Number(req.body[key]));
+  const confirmed = req.body.feedbackConfirmed === undefined ? row.feedback_confirmed : (req.body.feedbackConfirmed === true || req.body.feedbackConfirmed === 'true' ? 1 : 0);
+  db.prepare(`UPDATE play_records SET role = ?, rating = ?, note = ?, played_at = ?, session_id = ?, content_rating = ?, role_rating = ?, dm_rating = ?, table_rating = ?, feedback_confirmed = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`)
+    .run(value('role', row.role), value('rating', row.rating), value('note', row.note), value('playedAt', row.played_at), nextSessionId,
+      nullableRating('contentRating', row.content_rating), nullableRating('roleRating', row.role_rating), nullableRating('dmRating', row.dm_rating), nullableRating('tableRating', row.table_rating), confirmed, row.id, req.userId);
   res.json({ code: 0, data: { record: serializePlayRecord(getPersonalRecord(row.id, req.userId)), summary: getPlayRecordSummary(req.userId) }, message: '记录已更新' });
 });
 
@@ -449,12 +569,13 @@ app.get('/api/scripts/:id/notes', requireAuth, paginationValidation(), (req, res
   const total = db.prepare('SELECT COUNT(*) AS count FROM script_notes WHERE user_id = ? AND script_id = ?').get(req.userId, scriptId).count;
   const pagination = paginationFor(req, total);
   const rows = db.prepare(`
-    SELECT id, script_id, category, title, content, created_at, updated_at
+    SELECT id, script_id, session_id, category, title, content, created_at, updated_at
     FROM script_notes WHERE user_id = ? AND script_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
   `).all(req.userId, scriptId, pagination.limit, pagination.offset);
   res.json({ code: 0, data: rows.map((row) => ({
     id: row.id,
     scriptId: row.script_id,
+    sessionId: row.session_id || null,
     category: row.category,
     title: row.title || '',
     content: row.content,
@@ -464,6 +585,7 @@ app.get('/api/scripts/:id/notes', requireAuth, paginationValidation(), (req, res
 });
 
 app.post('/api/scripts/:id/notes', requireAuth, [
+  body('sessionId').optional({ nullable: true }).isInt({ min: 1 }),
   body('category').isIn(NOTE_CATEGORIES).withMessage('笔记分类无效'),
   body('title').optional().isString().bail().trim().isLength({ max: 80 }).withMessage('笔记标题最多 80 字'),
   body('content').isString().bail().trim().isLength({ min: 1, max: 1000 }).withMessage('笔记内容应为 1-1000 字'),
@@ -473,11 +595,15 @@ app.post('/api/scripts/:id/notes', requireAuth, [
   const scriptId = Number(req.params.id);
   if (!Number.isInteger(scriptId) || scriptId < 1) return res.status(400).json({ code: 400, message: '无效剧本' });
   if (!db.prepare('SELECT id FROM scripts WHERE id = ?').get(scriptId)) return res.status(404).json({ code: 404, message: '剧本不存在' });
-  const payload = { scriptId, category: req.body.category, title: normalizeText(req.body.title, 80), content: normalizeText(req.body.content, 1000) };
+  const sessionId = req.body.sessionId ? Number(req.body.sessionId) : null;
+  if (sessionId && !db.prepare('SELECT id FROM play_sessions WHERE id = ? AND user_id = ? AND script_id = ?').get(sessionId, req.userId, scriptId)) {
+    return res.status(400).json({ code: 400, message: '游玩批次不存在' });
+  }
+  const payload = { scriptId, sessionId, category: req.body.category, title: normalizeText(req.body.title, 80), content: normalizeText(req.body.content, 1000) };
   const id = createPersonalResource(req, res, 'note', payload, () => db.prepare(`
-    INSERT INTO script_notes (user_id, script_id, category, title, content)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(req.userId, scriptId, payload.category, payload.title, payload.content).lastInsertRowid,
+    INSERT INTO script_notes (user_id, script_id, session_id, category, title, content)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(req.userId, scriptId, payload.sessionId, payload.category, payload.title, payload.content).lastInsertRowid,
   (noteId) => db.prepare('SELECT id FROM script_notes WHERE id = ? AND user_id = ? AND script_id = ?').get(noteId, req.userId, scriptId));
   if (!id) return;
   res.json({ code: 0, data: { id }, message: '笔记已保存' });
@@ -485,6 +611,7 @@ app.post('/api/scripts/:id/notes', requireAuth, [
 
 app.patch('/api/scripts/:id/notes/:noteId', requireAuth, [
   resourceIdValidation('id'), resourceIdValidation('noteId'),
+  body('sessionId').optional({ nullable: true }).isInt({ min: 1 }),
   body('category').optional().isIn(NOTE_CATEGORIES),
   body('title').optional().isString().bail().trim().isLength({ max: 80 }),
   body('content').optional().isString().bail().trim().isLength({ min: 1, max: 1000 }),
@@ -492,9 +619,13 @@ app.patch('/api/scripts/:id/notes/:noteId', requireAuth, [
   if (!requireValidation(req, res)) return;
   const row = db.prepare('SELECT * FROM script_notes WHERE id = ? AND user_id = ? AND script_id = ?').get(Number(req.params.noteId), req.userId, Number(req.params.id));
   if (!row) return res.status(404).json({ code: 404, message: '笔记不存在' });
+  const sessionId = req.body.sessionId === undefined ? row.session_id : (req.body.sessionId ? Number(req.body.sessionId) : null);
+  if (sessionId && !db.prepare('SELECT id FROM play_sessions WHERE id = ? AND user_id = ? AND script_id = ?').get(sessionId, req.userId, Number(req.params.id))) {
+    return res.status(400).json({ code: 400, message: '游玩批次不存在' });
+  }
   const value = (key) => req.body[key] === undefined ? row[key] : req.body[key];
-  db.prepare(`UPDATE script_notes SET category = ?, title = ?, content = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`)
-    .run(value('category'), value('title'), value('content'), row.id, req.userId);
+  db.prepare(`UPDATE script_notes SET session_id = ?, category = ?, title = ?, content = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`)
+    .run(sessionId, value('category'), value('title'), value('content'), row.id, req.userId);
   res.json({ code: 0, data: { id: row.id }, message: '笔记已更新' });
 });
 
@@ -599,6 +730,7 @@ function normalizeText(value, maxLength = 80) {
 function normalizeAiNotes(notes) {
   if (!Array.isArray(notes)) return [];
   return notes.slice(0, 12).map((note) => ({
+    id: Number(note && (note.id || note.noteId)) || null,
     category: normalizeText(note && note.category, 20),
     title: normalizeText(note && note.title, 60),
     content: normalizeText(note && note.content, 300),
@@ -1908,6 +2040,42 @@ app.post(
     }
   }
 );
+
+app.post('/api/ai/evidence-coach', requireAuth, [
+  body('scriptId').isInt({ min: 1 }),
+  body('sessionId').optional({ nullable: true }).isInt({ min: 1 }),
+  body('noteIds').isArray({ min: 1, max: 5 }),
+  body('noteIds.*').isInt({ min: 1 }),
+  body('question').optional().isString().trim().isLength({ max: 300 }),
+], async (req, res) => {
+  if (!requireValidation(req, res)) return;
+  if (!requireAiReady(res, 'stuckCoach')) return;
+  if (!requireAiQuota(res, req.userId)) return;
+  const scriptId = Number(req.body.scriptId);
+  const sessionId = req.body.sessionId ? Number(req.body.sessionId) : null;
+  if (sessionId && !db.prepare('SELECT id FROM play_sessions WHERE id = ? AND user_id = ? AND script_id = ?').get(sessionId, req.userId, scriptId)) {
+    return res.status(400).json({ code: 400, message: '游玩批次不存在' });
+  }
+  const noteIds = [...new Set(req.body.noteIds.map(Number))];
+  const sessionClause = sessionId ? ' AND session_id = ?' : '';
+  const queryArgs = sessionId ? [req.userId, scriptId, sessionId, ...noteIds] : [req.userId, scriptId, ...noteIds];
+  const rows = db.prepare(`SELECT id, category, title, content FROM script_notes WHERE user_id = ? AND script_id = ?${sessionClause} AND id IN (${noteIds.map(() => '?').join(',')})`).all(...queryArgs);
+  if (rows.length !== noteIds.length) return res.status(400).json({ code: 400, message: '只能引用当前剧本下自己的笔记' });
+  const startedAt = Date.now();
+  const input = { scriptId, noteIds, question: normalizeText(req.body.question, 300) };
+  try {
+    const script = getScriptForAi(scriptId);
+    if (!script) return res.status(404).json({ code: 404, message: '剧本不存在' });
+    const result = await ai.generateEvidenceCoach(getAiConfig(), script, input.question, rows);
+    const allowed = new Set(noteIds);
+    result.data.sources = result.data.sources.filter((source) => allowed.has(source.noteId));
+    logAiUsage({ res, userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'ok', startedAt, aiMeta: result.meta });
+    res.json({ code: 0, data: { coach: result.data, provider: AI_PROVIDER, model: getAiModel() } });
+  } catch (error) {
+    logAiUsage({ res, userId: req.userId, feature: 'stuckCoach', input, outputStatus: 'error', startedAt, aiMeta: error.aiMeta });
+    sendAiError(res, error, '生成证据提示失败');
+  }
+});
 
 app.post(
   '/api/ai/report-classification',

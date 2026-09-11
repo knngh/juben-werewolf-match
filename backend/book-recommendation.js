@@ -35,8 +35,12 @@ function experienceTags(tags) {
 function riskTags(row) {
   const explicit = parseArray(row.risk_tags || row.riskTags);
   const warnings = parseArray(row.warnings);
-  return Object.keys(RISK_TAGS).filter((code) => explicit.includes(code) || explicit.includes(RISK_TAGS[code].label) ||
-    warnings.some((warning) => RISK_TAGS[code].phrases.some((phrase) => warning.includes(phrase))));
+  if (explicit.length) return Object.keys(RISK_TAGS).filter((code) => explicit.includes(code) || explicit.includes(RISK_TAGS[code].label));
+  return Object.keys(RISK_TAGS).filter((code) => warnings.some((warning) => RISK_TAGS[code].phrases.some((phrase) => {
+    const position = warning.indexOf(phrase);
+    if (position < 0) return false;
+    return !/(不含|无|没有|未见|避免)$/.test(warning.slice(Math.max(0, position - 3), position));
+  })));
 }
 
 function buildFeedbackPreferences(records) {

@@ -28,6 +28,8 @@ function enrichScript(item) {
     primaryReason: item.matchReasons && item.matchReasons.length ? item.matchReasons[0] : '',
     highlightText: item.highlights && item.highlights.length ? item.highlights[0] : '查看详情了解亮点',
     warningText: item.warnings && item.warnings.length ? item.warnings[0] : '内容风险待确认',
+    contentStatusText: item.contentStatus === 'verified' ? '已核验' : '资料待确认',
+    compareSelected: false,
   });
 }
 
@@ -47,6 +49,11 @@ Page({
     nextOffset: 0,
     loadingMore: false,
     actionPending: false,
+    selectionContext: { maxDuration: null, players: null, difficulty: '' },
+    selectionSaving: false,
+    compareIds: [],
+    compareItems: [],
+    compareLoading: false,
     scripts: [],
     filters: {
       q: '',
@@ -106,8 +113,12 @@ Page({
     const tastePromise = loggedIn
       ? api.get('/api/taste-profile')
       : Promise.resolve({ code: 0, data: { completedAt: '' } });
-    const query = api.toQuery(Object.assign({}, this.data.filters, { offset: append ? this.data.nextOffset : 0 }));
-    return Promise.all([api.get('/api/scripts' + query), tastePromise]).then(([scriptsRes, tasteRes]) => {
+    const contextPromise = loggedIn ? api.get('/api/selection-context') : Promise.resolve({ code: 0, data: {} });
+    return Promise.all([tastePromise, contextPromise]).then(([tasteRes, contextRes]) => {
+      const occasion = loggedIn && contextRes.code === 0 ? Object.assign({}, this.data.selectionContext, contextRes.data || {}) : {};
+      const query = api.toQuery(Object.assign({}, this.data.filters, occasion, { offset: append ? this.data.nextOffset : 0 }));
+      return Promise.all([api.get('/api/scripts' + query), Promise.resolve(tasteRes), Promise.resolve(contextRes)]);
+    }).then(([scriptsRes, tasteRes, contextRes]) => {
       if (loadId !== this.loadId || token !== api.getToken()) return;
       const next = { loading: false, loadingMore: false, loadError: '', loadErrorHint: '' };
       if (scriptsRes.code === 0 && Array.isArray(scriptsRes.data)) {
@@ -123,6 +134,7 @@ Page({
         next.loadErrorHint = scriptsRes.hint || '';
       }
       next.tasteCompleted = this.data.tasteCompleted;
+      if (contextRes.code === 0 && contextRes.data) next.selectionContext = Object.assign({}, this.data.selectionContext, contextRes.data);
       if (tasteRes.code === 0 && tasteRes.data) {
         next.tasteCompleted = !!tasteRes.data.completedAt;
       } else if (!next.loadError) {
@@ -142,6 +154,51 @@ Page({
 
   loadMore() {
     if (!this.data.loading && !this.data.loadingMore && this.data.hasMore) return this.load(true);
+  },
+
+  onOccasionInput(event) {
+    const field = event.currentTarget.dataset.field;
+    const value = Number(event.detail.value) || null;
+    this.setData({ ['selectionContext.' + field]: value });
+  },
+
+  onOccasionDifficulty(event) {
+    const row = this.data.difficulties[Number(event.detail.value)];
+    this.setData({ 'selectionContext.difficulty': row ? row.value : '' });
+  },
+
+  saveOccasion() {
+    if (!api.getToken() || this.data.selectionSaving) return;
+    const context = this.data.selectionContext;
+    this.setData({ selectionSaving: true });
+    return api.post('/api/selection-context', context).then((res) => {
+      if (res.code !== 0) return wx.showToast({ title: res.message || '条件保存失败', icon: 'none' });
+      wx.showToast({ title: '本次条件已保存', icon: 'success' });
+      return this.load();
+    }).catch(() => wx.showToast({ title: '条件保存失败，请重试', icon: 'none' })).then(() => this.setData({ selectionSaving: false }));
+  },
+
+  toggleCompare(event) {
+    const id = Number(event.currentTarget.dataset.id);
+    const ids = this.data.compareIds.slice();
+    const index = ids.indexOf(id);
+    if (index >= 0) ids.splice(index, 1);
+    else if (ids.length >= 3) return wx.showToast({ title: '最多对比 3 本', icon: 'none' });
+    else ids.push(id);
+    this.setData({ compareIds: ids, scripts: this.data.scripts.map((item) => Object.assign({}, item, { compareSelected: ids.includes(item.id) })) });
+  },
+
+  clearCompare() {
+    this.setData({ compareIds: [], compareItems: [], scripts: this.data.scripts.map((item) => Object.assign({}, item, { compareSelected: false })) });
+  },
+
+  compareSelected() {
+    if (!this.data.compareIds.length || this.data.compareLoading) return;
+    this.setData({ compareLoading: true });
+    return api.get('/api/scripts/compare?ids=' + this.data.compareIds.join(',')).then((res) => {
+      if (res.code !== 0) return wx.showToast({ title: res.message || '对比失败', icon: 'none' });
+      this.setData({ compareItems: res.data || [] });
+    }).catch(() => wx.showToast({ title: '对比失败，请重试', icon: 'none' })).then(() => this.setData({ compareLoading: false }));
   },
 
   onSearchInput(event) {

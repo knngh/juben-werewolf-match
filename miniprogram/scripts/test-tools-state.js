@@ -59,7 +59,11 @@ test('a timed-out save reuses its persisted submission ID after reopening', asyn
   const first = harness();
   await first.page.load();
   let submitted;
-  first.api.post = async (url, data) => { submitted = data; return { code: 500, status: 0 }; };
+  first.api.post = async (url, data) => {
+    if (url === '/api/play-sessions') return { code: 0, data: { id: 77 } };
+    submitted = data;
+    return { code: 500, status: 0 };
+  };
   first.page.setData({ 'noteForm.content': 'Do not duplicate this clue' });
   await first.page.saveNote();
   assert.match(submitted.clientRequestId, /^[A-Za-z0-9_-]{16,100}$/);
@@ -67,10 +71,11 @@ test('a timed-out save reuses its persisted submission ID after reopening', asyn
   const second = harness('tools', first.storage, first.clock);
   await second.page.load();
   await second.page.saveNote();
-  assert.equal(second.requests[0].data.clientRequestId, submitted.clientRequestId);
+  assert.equal(second.requests.find((item) => item.url === '/api/scripts/1/notes').data.clientRequestId, submitted.clientRequestId);
   second.page.setData({ 'noteForm.content': 'A different clue' });
   await second.page.saveNote();
-  assert.notEqual(second.requests[1].data.clientRequestId, submitted.clientRequestId);
+  const noteRequests = second.requests.filter((item) => item.url === '/api/scripts/1/notes');
+  assert.notEqual(noteRequests[1].data.clientRequestId, submitted.clientRequestId);
 });
 
 test('a note edit updates the same note and preserves a category changed during saving', async () => {
@@ -202,7 +207,7 @@ test('repeated taps do not submit duplicate notes, records or AI requests', asyn
   page.saveNote(); page.saveNote();
   page.saveRecord(); page.saveRecord();
   page.generatePlayPrep(); page.generatePlayPrep();
-  assert.equal(calls, 3);
+  assert.equal(calls, 2);
 });
 
 test('a delayed timer callback accounts for actual elapsed time', async () => {

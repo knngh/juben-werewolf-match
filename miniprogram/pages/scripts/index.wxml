@@ -33,6 +33,16 @@
     <button class="search-btn" bindtap="load">搜索</button>
   </view>
 
+  <view wx:if="{{loggedIn}}" class="occasion-panel">
+    <view class="occasion-head"><text class="section-title">这次想怎么选</text><text class="section-hint">硬条件先过滤</text></view>
+    <view class="occasion-fields">
+      <input class="occasion-input" type="number" value="{{selectionContext.players || ''}}" data-field="players" bindinput="onOccasionInput" placeholder="人数" />
+      <input class="occasion-input" type="number" value="{{selectionContext.maxDuration || ''}}" data-field="maxDuration" bindinput="onOccasionInput" placeholder="最长分钟" />
+      <picker range="{{difficulties}}" range-key="label" bindchange="onOccasionDifficulty"><view class="occasion-input">{{selectionContext.difficulty || '难度不限'}}</view></picker>
+      <button class="btn btn-secondary btn-small" loading="{{selectionSaving}}" bindtap="saveOccasion">应用</button>
+    </view>
+  </view>
+
   <view class="collection-row">
     <button wx:for="{{collections}}" wx:key="value" class="filter-chip {{item.active ? 'filter-active' : ''}}" data-field="collection" data-value="{{item.value}}" bindtap="applyFilter">{{item.label}}</button>
   </view>
@@ -91,9 +101,15 @@
       </view>
 
       <view class="card-actions">
+        <button class="text-action" data-id="{{item.id}}" catchtap="toggleCompare">{{item.compareSelected ? '已选对比' : '加入对比'}}</button>
         <button class="text-action" disabled="{{actionPending}}" data-id="{{item.id}}" data-dismissed="{{item.dismissed}}" catchtap="dismiss">{{item.dismissed ? '恢复推荐' : '不感兴趣'}}</button>
         <button class="save-action {{item.saved ? 'save-active' : ''}}" disabled="{{actionPending}}" data-id="{{item.id}}" data-saved="{{item.saved}}" catchtap="toggleSave">{{item.saved ? '已收藏' : '收藏'}}</button>
       </view>
+    </view>
+    <view wx:if="{{compareIds.length}}" class="compare-bar"><text>已选 {{compareIds.length}} 本</text><button class="text-link" bindtap="clearCompare">清空</button><button class="btn btn-primary btn-small" loading="{{compareLoading}}" bindtap="compareSelected">查看对比</button></view>
+    <view wx:if="{{compareItems.length}}" class="compare-panel">
+      <view class="compare-head"><text class="section-title">可解释对比</text><button class="text-link" bindtap="clearCompare">关闭</button></view>
+      <view wx:for="{{compareItems}}" wx:key="id" class="compare-row"><view class="compare-title"><text>{{item.title}}</text><text>{{item.matchScore === null ? '口味待完善' : item.matchScore + ' 分'}}</text></view><text class="compare-meta">{{item.contentStatus === 'verified' ? '已核验' : '资料待确认'}} · {{item.durationMin}} 分钟 · {{item.minPlayers}}-{{item.maxPlayers}} 人</text><text class="compare-reasons">{{item.conflicts.length ? item.conflicts.join('、') : (item.matchReasons.join('、') || '暂无额外冲突')}}</text></view>
     </view>
     <button wx:if="{{hasMore}}" class="btn btn-secondary btn-full" loading="{{loadingMore}}" disabled="{{loadingMore}}" bindtap="loadMore">加载更多</button>
   </view>

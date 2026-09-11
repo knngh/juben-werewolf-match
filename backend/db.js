@@ -242,6 +242,7 @@ ensureColumn('profiles', 'player_count_range', 'TEXT');
 ensureColumn('profiles', 'play_modes', "TEXT DEFAULT '[]'");
 ensureColumn('profiles', 'taste_profile', "TEXT DEFAULT '{}' ");
 ensureColumn('profiles', 'taste_completed_at', 'TEXT');
+ensureColumn('profiles', 'selection_context', "TEXT DEFAULT '{}' ");
 
 ensureColumn('users', 'mp_openid', 'TEXT');
 ensureColumn('users', 'mp_unionid', 'TEXT');
@@ -267,6 +268,37 @@ ensureColumn('ai_usage_logs', 'cost_credits', 'REAL');
 ensureColumn('ai_usage_logs', 'reserved_cost_credits', 'REAL NOT NULL DEFAULT 0');
 ensureColumn('ai_usage_logs', 'reservation_expires_at', 'TEXT');
 
+// Solo discovery metadata and play-session attribution are additive so existing data keeps working.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS play_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    script_id INTEGER NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+    started_at TEXT DEFAULT (datetime('now')),
+    ended_at TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_play_sessions_user ON play_sessions(user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_play_sessions_script ON play_sessions(script_id, user_id);
+`);
+
+ensureColumn('scripts', 'risk_tags', "TEXT NOT NULL DEFAULT '[]'");
+ensureColumn('scripts', 'content_status', "TEXT NOT NULL DEFAULT 'unverified'");
+ensureColumn('scripts', 'source_name', 'TEXT');
+ensureColumn('scripts', 'source_url', 'TEXT');
+ensureColumn('scripts', 'source_version', 'TEXT');
+ensureColumn('scripts', 'source_checked_at', 'TEXT');
+ensureColumn('play_records', 'session_id', 'INTEGER REFERENCES play_sessions(id) ON DELETE SET NULL');
+ensureColumn('play_records', 'content_rating', 'INTEGER');
+ensureColumn('play_records', 'role_rating', 'INTEGER');
+ensureColumn('play_records', 'dm_rating', 'INTEGER');
+ensureColumn('play_records', 'table_rating', 'INTEGER');
+ensureColumn('play_records', 'feedback_confirmed', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('script_notes', 'session_id', 'INTEGER REFERENCES play_sessions(id) ON DELETE SET NULL');
+db.exec('CREATE INDEX IF NOT EXISTS idx_script_notes_session ON script_notes(session_id, user_id, script_id, created_at DESC)');
+
 db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mp_openid ON users(mp_openid) WHERE mp_openid IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_users_mp_unionid ON users(mp_unionid);
@@ -275,8 +307,8 @@ db.exec(`
 const insertStarterScript = db.prepare(`
   INSERT OR IGNORE INTO scripts (
     slug, title, game_type, tags, difficulty, duration_min, min_players, max_players,
-    highlights, warnings, description
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    highlights, warnings, description, risk_tags, content_status, source_name, source_version, source_checked_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 starterScripts.forEach((item) => insertStarterScript.run(
   item.slug,
@@ -289,7 +321,13 @@ starterScripts.forEach((item) => insertStarterScript.run(
   item.maxPlayers,
   JSON.stringify(item.highlights),
   JSON.stringify(item.warnings),
-  item.description
+  item.description,
+  JSON.stringify(item.riskTags || []), item.contentStatus || 'unverified', item.sourceName || '', item.sourceVersion || '', item.sourceCheckedAt || ''
+));
+
+const updateStarterMetadata = db.prepare(`UPDATE scripts SET risk_tags = ?, content_status = ?, source_name = ?, source_version = ?, source_checked_at = ? WHERE slug = ?`);
+starterScripts.forEach((item) => updateStarterMetadata.run(
+  JSON.stringify(item.riskTags || []), item.contentStatus || 'unverified', item.sourceName || '', item.sourceVersion || '', item.sourceCheckedAt || '', item.slug
 ));
 
 module.exports = db;

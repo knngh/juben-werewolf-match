@@ -357,6 +357,12 @@
   margin-top: 12rpx;
 }
 
+.feedback-grid { display: flex; flex-direction: column; gap: 10rpx; margin-top: 10rpx; }
+.feedback-item { display: flex; align-items: center; justify-content: space-between; gap: 10rpx; color: #667269; font-size: 22rpx; }
+.feedback-rating-row { display: flex; gap: 6rpx; }
+.feedback-rating { width: 42rpx; min-height: 42rpx; border: 1rpx solid #d5ded4; border-radius: 6rpx; color: #7a857c; font-size: 20rpx; }
+.feedback-confirm { display: flex; align-items: center; gap: 8rpx; margin-top: 12rpx; color: #667269; font-size: 22rpx; line-height: 1.4; }
+
 .rating {
   display: inline-flex;
   width: 72rpx;

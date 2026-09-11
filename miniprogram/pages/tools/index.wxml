@@ -61,7 +61,7 @@
         <view wx:for="{{notes}}" wx:key="id" class="note-item">
           <view class="note-item-head"><text class="note-category">{{item.category}}</text><text class="note-date">{{item.createdAt}}</text></view>
           <text wx:if="{{item.title}}" class="note-title">{{item.title}}</text><text class="note-content">{{item.content}}</text>
-          <view class="item-actions"><button class="text-link" disabled="{{savingNote || deletingNoteId}}" data-id="{{item.id}}" bindtap="editNote">编辑</button><button class="text-link danger-link" disabled="{{savingNote || deletingNoteId}}" loading="{{deletingNoteId === item.id}}" data-id="{{item.id}}" bindtap="deleteNote">删除</button></view>
+          <view class="item-actions"><button class="text-link" disabled="{{savingNote || deletingNoteId}}" data-id="{{item.id}}" bindtap="toggleEvidenceNote">{{item.evidenceSelected ? '已选证据' : '选作证据'}}</button><button class="text-link" disabled="{{savingNote || deletingNoteId}}" data-id="{{item.id}}" bindtap="editNote">编辑</button><button class="text-link danger-link" disabled="{{savingNote || deletingNoteId}}" loading="{{deletingNoteId === item.id}}" data-id="{{item.id}}" bindtap="deleteNote">删除</button></view>
         </view>
       </view>
       <view wx:else class="empty note-empty">还没有笔记，先记下第一条线索</view>
@@ -75,6 +75,7 @@
         <view class="field"><text class="label">打本日期</text><picker mode="date" value="{{recordForm.playedAt}}" data-field="playedAt" bindchange="onRecordInput"><view class="input date-picker">{{recordForm.playedAt}}</view></picker></view>
         <view class="field"><text class="label">这次拿到的角色</text><input class="input" value="{{recordForm.role}}" data-field="role" bindinput="onRecordInput" maxlength="80" placeholder="可选，例如：侦探" /></view>
         <view class="field"><text class="label">整体体验</text><view class="rating-row"><button wx:for="{{ratingOptions}}" wx:key="*this" class="rating {{recordForm.rating >= item ? 'rating-active' : ''}}" data-rating="{{item}}" bindtap="selectRating">{{item}}</button></view></view>
+        <view class="field"><text class="label">体验归因（可选）</text><view class="feedback-grid"><view wx:for="{{feedbackOptions}}" wx:key="field" class="feedback-item"><text>{{item.label}}</text><view class="feedback-rating-row"><button wx:for="{{ratingOptions}}" wx:key="*this" class="feedback-rating {{recordForm[item.field] >= rating ? 'rating-active' : ''}}" wx:for-item="rating" data-field="{{item.field}}" data-rating="{{rating}}" bindtap="selectFeedbackRating">{{rating}}</button></view></view></view><label class="feedback-confirm"><checkbox value="confirmed" checked="{{recordForm.feedbackConfirmed}}" bindtap="toggleFeedbackConfirmed" />只用已确认的剧本内容体验影响后续推荐</label></view>
         <view class="field"><text class="label">一句话短评</text><textarea class="textarea" value="{{recordForm.note}}" data-field="note" bindinput="onRecordInput" maxlength="500" placeholder="这本最值得记住的是什么？" /></view>
         <button class="btn btn-primary btn-full" loading="{{savingRecord}}" disabled="{{savingRecord}}" bindtap="saveRecord">{{editingRecordId ? '保存修改' : '保存到我的档案'}}</button>
       </view>
@@ -93,6 +94,7 @@
           <button class="btn btn-secondary btn-small" loading="{{aiLoading}}" bindtap="generateStuckCoach">梳理</button>
         </view>
         <view class="coach-input"><textarea class="textarea" value="{{coachQuestion}}" bindinput="onCoachQuestion" maxlength="300" placeholder="可选：描述你现在卡在哪里" /></view>
+        <view class="ai-action"><view class="ai-action-copy"><text class="ai-action-title">证据提示</text><text class="ai-action-hint">只核查你选中的笔记，并标出来源</text></view><button class="btn btn-secondary btn-small" loading="{{aiLoading}}" bindtap="generateEvidenceCoach">核查</button></view>
         <view class="ai-action">
           <view class="ai-action-copy"><text class="ai-action-title">打后复盘</text><text class="ai-action-hint">结合角色、评分和笔记，沉淀下一次选本信号</text></view>
           <button class="btn btn-secondary btn-small" loading="{{aiLoading}}" bindtap="generatePlayRecap">生成</button>
@@ -125,6 +127,7 @@
         <text class="ai-list-label">下次可以</text>
         <view wx:for="{{aiRecap.nextTime}}" wx:key="*this" class="ai-list-item"><text class="ai-list-index">→</text><text>{{item}}</text></view>
       </view>
+      <view wx:if="{{aiEvidence}}" class="ai-result"><view class="ai-result-head"><text class="ai-result-title">证据提示</text><text class="ai-result-badge">AI</text></view><text class="ai-result-summary">{{aiEvidence.summary}}</text><text class="ai-list-label">核查步骤</text><view wx:for="{{aiEvidence.steps}}" wx:key="*this" class="ai-list-item"><text class="ai-list-index">{{index + 1}}</text><text>{{item}}</text></view><text class="ai-list-label">引用来源</text><view wx:for="{{aiEvidence.sources}}" wx:key="noteId" class="ai-list-item"><text class="ai-list-index">#</text><text>笔记 {{item.noteId}}：{{item.reason}}</text></view><text class="ai-list-label">未知点</text><view wx:for="{{aiEvidence.unknowns}}" wx:key="*this" class="ai-list-item"><text class="ai-list-index">?</text><text>{{item}}</text></view></view>
     </view>
   </view>
   <view wx:elif="{{!loadError}}" class="empty">暂无可用剧本</view>

@@ -10,6 +10,8 @@ module.exports = [
     maxPlayers: 6,
     highlights: ['人物关系清晰', '情感线循序渐进', '适合第一次尝试'],
     warnings: ['包含离别主题', '不适合只想纯推理的玩家'],
+    riskTags: ['forced_emotion'],
+    contentStatus: 'verified', sourceName: '示例资料', sourceVersion: 'demo-2026-09', sourceCheckedAt: '2026-09-01',
     description: '一封迟到多年的信，把几位旧友重新带回雾港。',
   },
   {
@@ -23,6 +25,7 @@ module.exports = [
     maxPlayers: 7,
     highlights: ['线索密度高', '时间线严谨', '适合复盘'],
     warnings: ['信息量较大', '需要完整投入四小时'],
+    riskTags: [], contentStatus: 'verified', sourceName: '示例资料', sourceVersion: 'demo-2026-09', sourceCheckedAt: '2026-09-01',
     description: '暴雪封山后，公馆中的每个人都在隐瞒一段时间。',
   },
   {
@@ -36,6 +39,7 @@ module.exports = [
     maxPlayers: 7,
     highlights: ['氛围演绎强', '机制与剧情交错', '节奏紧凑'],
     warnings: ['含惊吓和压迫感桥段', '怕黑或怕惊吓请谨慎'],
+    riskTags: ['fear'], contentStatus: 'verified', sourceName: '示例资料', sourceVersion: 'demo-2026-09', sourceCheckedAt: '2026-09-01',
     description: '驶向终点的列车没有下一站，乘客却一个个收到同一张车票。',
   },
   {
@@ -49,6 +53,7 @@ module.exports = [
     maxPlayers: 12,
     highlights: ['规则易懂', '发言节奏快', '适合新手教学'],
     warnings: ['对抗感明显', '不喜欢公开发言请谨慎'],
+    riskTags: ['confrontation'], contentStatus: 'verified', sourceName: '示例资料', sourceVersion: 'demo-2026-09', sourceCheckedAt: '2026-09-01',
     description: '红月升起后的营地里，所有人都要在有限信息中做出选择。',
   },
   {
@@ -62,6 +67,7 @@ module.exports = [
     maxPlayers: 12,
     highlights: ['角色能力丰富', '允许出局后继续参与', '适合社交局'],
     warnings: ['需要主持人带领流程', '信息交换较频繁'],
+    riskTags: [], contentStatus: 'unverified', sourceName: '示例资料', sourceVersion: 'demo-2026-09', sourceCheckedAt: '2026-09-01',
     description: '钟声响起后，村庄里的每个人都拥有一条可能改变结局的信息。',
   },
   {
@@ -75,6 +81,7 @@ module.exports = [
     maxPlayers: 4,
     highlights: ['规则负担低', '合作目标明确', '适合熟人和新手'],
     warnings: ['策略深度较轻', '喜欢强对抗的玩家可能觉得简单'],
+    riskTags: [], contentStatus: 'unverified', sourceName: '示例资料', sourceVersion: 'demo-2026-09', sourceCheckedAt: '2026-09-01',
     description: '一起经营一座小镇，在有限回合里完成居民们的愿望。',
   },
   {
@@ -88,6 +95,7 @@ module.exports = [
     maxPlayers: 5,
     highlights: ['资源规划有层次', '每局路线不同', '适合喜欢研究机制'],
     warnings: ['首局学习成本较高', '不建议中途加入'],
+    riskTags: [], contentStatus: 'unverified', sourceName: '示例资料', sourceVersion: 'demo-2026-09', sourceCheckedAt: '2026-09-01',
     description: '船员们要在燃料耗尽前规划一条最有价值的深空航线。',
   },
   {
@@ -101,6 +109,7 @@ module.exports = [
     maxPlayers: 5,
     highlights: ['角色目标清晰', 'GM 可快速带入', '适合短团体验'],
     warnings: ['需要连续投入三小时', '偏好纯战斗的玩家可能不适应'],
+    riskTags: [], contentStatus: 'unverified', sourceName: '示例资料', sourceVersion: 'demo-2026-09', sourceCheckedAt: '2026-09-01',
     description: '一支临时组成的队伍，在绿谷边缘寻找失踪的商队。',
   },
 ];

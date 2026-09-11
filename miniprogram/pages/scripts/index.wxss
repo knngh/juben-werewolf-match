@@ -201,6 +201,88 @@
   font-weight: 600;
 }
 
+.occasion-panel,
+.compare-panel {
+  margin-top: 18rpx;
+  padding: 20rpx;
+  border: 1rpx solid #dfe7dc;
+  border-radius: 10rpx;
+  background: #ffffff;
+}
+
+.occasion-head,
+.compare-head,
+.compare-title,
+.compare-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.occasion-head .section-title,
+.compare-head .section-title {
+  margin-bottom: 0;
+}
+
+.occasion-fields {
+  display: flex;
+  gap: 10rpx;
+  margin-top: 14rpx;
+}
+
+.occasion-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 60rpx;
+  padding: 14rpx;
+  border: 1rpx solid #d8ded2;
+  border-radius: 8rpx;
+  color: #4e5d51;
+  font-size: 22rpx;
+  text-align: center;
+}
+
+.occasion-fields .btn {
+  flex: 0 0 auto;
+}
+
+.compare-bar {
+  gap: 16rpx;
+  justify-content: flex-end;
+  margin-top: 18rpx;
+  color: #5e6b61;
+  font-size: 23rpx;
+}
+
+.compare-row {
+  margin-top: 14rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx solid #edf0eb;
+}
+
+.compare-title text:first-child {
+  color: #304033;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.compare-title text:last-child {
+  color: #1f7a4d;
+  font-weight: 700;
+}
+
+.compare-meta,
+.compare-reasons {
+  display: block;
+  margin-top: 6rpx;
+  color: #768177;
+  font-size: 22rpx;
+}
+
+.compare-reasons {
+  color: #4e6354;
+}
+
 .filter-scroll {
   width: 100%;
   margin-top: 20rpx;

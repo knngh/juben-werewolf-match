@@ -172,4 +172,61 @@ test('solo discovery and play archive API', async (t) => {
       assert(!rows(first).some((row) => row.id === rows(next)[0].id));
     }
   });
+
+  await t.test('content provenance is explicit and occasion constraints filter before ranking', async () => {
+    const token = await register();
+    const scripts = await request('GET', '/api/scripts?maxDuration=120&players=4&catalog=1', undefined, token);
+    assert(scripts.data.every((item) => item.durationMin <= 120 && item.minPlayers <= 4 && item.maxPlayers >= 4));
+    const catalogue = await request('GET', '/api/scripts?catalog=1', undefined, token);
+    assert.equal(catalogue.data.find((item) => item.id === 1).contentStatus, 'verified');
+    assert.equal(catalogue.data.find((item) => item.id === 5).contentStatus, 'unverified');
+    assert.equal(catalogue.data.find((item) => item.id === 5).sourceName, '示例资料');
+    assert.equal((await request('POST', '/api/selection-context', { maxDuration: 120, players: 4, difficulty: '入门' }, token)).code, 0);
+    const context = await request('GET', '/api/selection-context', undefined, token);
+    assert.deepEqual(context.data, { maxDuration: 120, players: 4, difficulty: '入门' });
+  });
+
+  await t.test('comparison returns the same explainable signals as detail', async () => {
+    const token = await register();
+    await request('POST', '/api/taste-profile', { experience: ['硬核推理'], frequency: '高频' }, token);
+    const comparison = await request('GET', '/api/scripts/compare?ids=1,2,3', undefined, token);
+    assert.equal(comparison.code, 0);
+    assert.equal(comparison.data.length, 3);
+    assert(comparison.data.every((item) => Array.isArray(item.matchReasons) && Array.isArray(item.riskTags)));
+    assert.equal((await request('GET', '/api/scripts/compare?ids=1,2,3,4', undefined, token)).status, 400);
+  });
+
+  await t.test('play sessions and attributed feedback update only confirmed content preference', async () => {
+    const token = await register();
+    const session = await request('POST', '/api/play-sessions', { scriptId: 2 }, token);
+    assert.equal(session.code, 0);
+    const note = await request('POST', '/api/scripts/2/notes', { sessionId: session.data.id, category: '疑点', content: '本次批次线索', clientRequestId: 'session-note-key-0001' }, token);
+    assert.equal(note.code, 0);
+    const notes = await request('GET', '/api/scripts/2/notes', undefined, token);
+    assert.equal(notes.data.find((item) => item.id === note.data.id).sessionId, session.data.id);
+    const record = await request('POST', '/api/play-records', {
+      scriptId: 2, sessionId: session.data.id, rating: 1, contentRating: 5, roleRating: 1, dmRating: 1, tableRating: 1,
+      feedbackConfirmed: true, playedAt: '2026-09-11', clientRequestId: 'feedback-key-000001',
+    }, token);
+    assert.equal(record.code, 0);
+    assert.equal(record.data.record.sessionId, session.data.id);
+    const before = await request('GET', '/api/scripts/2', undefined, token);
+    assert(before.data.matchReasons.includes('你对这类体验的评分较高'));
+    assert.equal((await request('PATCH', '/api/play-sessions/' + session.data.id, { status: 'completed' }, token)).code, 0);
+    assert.equal((await request('GET', '/api/play-sessions', undefined, token)).data[0].status, 'completed');
+  });
+
+  await t.test('evidence coach accepts only owned notes and returns source ids', async () => {
+    const token = await register();
+    const other = await register();
+    const one = await request('POST', '/api/scripts/1/notes', { category: '疑点', content: 'The clock stopped at ten', clientRequestId: 'evidence-note-0001' }, token);
+    const two = await request('POST', '/api/scripts/1/notes', { category: '线索卡', content: 'A key was wet', clientRequestId: 'evidence-note-0002' }, token);
+    const evidence = await request('POST', '/api/ai/evidence-coach', { scriptId: 1, noteIds: [one.data.id, two.data.id], question: '哪条线索需要核查？' }, token);
+    assert.equal(evidence.code, 0);
+    assert(evidence.data.coach.sources.every((source) => [one.data.id, two.data.id].includes(source.noteId)));
+    assert.equal((await request('POST', '/api/ai/evidence-coach', { scriptId: 1, noteIds: [one.data.id], question: 'x' }, other)).status, 400);
+    assert.equal((await request('POST', '/api/ai/evidence-coach', { scriptId: 1, noteIds: [999999], question: 'x' }, token)).status, 400);
+    const session = await request('POST', '/api/play-sessions', { scriptId: 1 }, token);
+    assert.equal((await request('POST', '/api/ai/evidence-coach', { scriptId: 1, sessionId: session.data.id, noteIds: [one.data.id], question: 'x' }, token)).status, 400);
+  });
 });

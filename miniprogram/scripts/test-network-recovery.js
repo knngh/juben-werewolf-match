@@ -170,11 +170,13 @@ test('tools: retrying records preserves the active timer and note draft', async 
 
 test('scripts: an older failed request cannot overwrite a successful retry', async () => {
   let finish;
-  const { page, api } = loadPage('scripts', (url) => url === '/api/scripts'
+  const { page, api } = loadPage('scripts', (url) => url.startsWith('/api/scripts')
     ? new Promise((resolve) => { finish = resolve; }) : healthy(url));
   const older = page.load();
-  api.get = healthy;
+  await new Promise((resolve) => setImmediate(resolve));
+  api.get = (url) => url.startsWith('/api/scripts') ? healthy(url) : healthy(url);
   await page.load();
+  assert.equal(typeof finish, 'function');
   finish(unavailable);
   await older;
   assert.equal(page.data.loadError, '');
